@@ -4,15 +4,15 @@ import shutil
 
 def align_complexes(pdb_A, pdb_B, out_B):
     """Align 2 structures with oespruce, Structure A is the reference
-        Parameters
-        ----------
-        pdb_A : pdb structure
-            Complex A
-        pdb_B : pdb structure
-            Complex B
-        out_B : pdb structure
-            Aligned structure of complex B
-        """
+    Parameters
+    ----------
+    pdb_A : pdb structure
+        Complex A
+    pdb_B : pdb structure
+        Complex B
+    out_B : pdb structure
+        Aligned structure of complex B
+    """
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
@@ -47,19 +47,19 @@ def align_complexes(pdb_A, pdb_B, out_B):
 
 def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='LIG', ligand_B='LIG'):
     """Add ligand B coordinates to coordinate (.gro) file of ligand A in complex with protein
-        Parameters
-        ----------
-        in_file_A : .gro file
-            Complex A coordinate file
-        in_file_B : .gro file
-            Complex B coordinate file
-        out_file : .gro file
-            Complex A + ligand B coordinate file
-        ligand_A: str
-            Three letter code for ligand A
-        ligand_B: str
-            Three letter code for ligand B
-        """
+    Parameters
+    ----------
+    in_file_A : .gro file
+        Complex A coordinate file
+    in_file_B : .gro file
+        Complex B coordinate file
+    out_file : .gro file
+        Complex A + ligand B coordinate file
+    ligand_A: str
+        Three letter code for ligand A
+    ligand_B: str
+        Three letter code for ligand B
+    """
     # make copy of in_file_A ---> new outfile
     shutil.copy(in_file_A, out_file)
     file = open(in_file_B, 'r')
