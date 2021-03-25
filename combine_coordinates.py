@@ -1,17 +1,37 @@
 from openeye import oechem, oespruce
 import parmed as pmd
 import shutil
+import mdtraj as md
+
+def align_complexes_mdtraj(pdb_A, pdb_B, out_B):
+    """Align 2 structures with oespruce, Structure A is the reference
+    Parameters
+    ----------
+    pdb_A : str
+        pdb structure Complex A
+    pdb_B : str
+        pdb structure Complex B
+    out_B : str
+        pdb structure Aligned structure of complex B
+    """
+
+    ligand_A = md.load(pdb_A)
+    ligand_B = md.load(pdb_B)
+    ligand_B.superpose(ligand_A)
+    ligand_B.save(out_B)
+
+    return
 
 def align_complexes(pdb_A, pdb_B, out_B):
     """Align 2 structures with oespruce, Structure A is the reference
     Parameters
     ----------
-    pdb_A : pdb structure
-        Complex A
-    pdb_B : pdb structure
-        Complex B
-    out_B : pdb structure
-        Aligned structure of complex B
+    pdb_A : str
+        pdb structure Complex A
+    pdb_B : str
+        pdb structure Complex B
+    out_B : str
+        pdb structure Aligned structure of complex B
     """
 
     complex_A = oechem.OEGraphMol()
@@ -20,6 +40,7 @@ def align_complexes(pdb_A, pdb_B, out_B):
                   oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
     ifs.open(pdb_A)
     oechem.OEReadMolecule(ifs, complex_A)
+    # oechem.OEReadPDBFile(ifs, complex_A)
     ifs.close()
 
     complex_B = oechem.OEGraphMol()
@@ -28,6 +49,7 @@ def align_complexes(pdb_A, pdb_B, out_B):
                   oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
     ifs.open(pdb_B)
     oechem.OEReadMolecule(ifs, complex_B)
+    # oechem.OEReadPDBFile(ifs, complex_B)
     ifs.close()
 
     # superposition = oespruce.OEStructuralSuperposition(ref_prot, fit_prot)
@@ -37,7 +59,7 @@ def align_complexes(pdb_A, pdb_B, out_B):
     superposition.Transform(complex_B)
 
     ofs = oechem.oemolostream()
-    # ofs.SetFlavor(oechem.OEFormat_PDB, oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
+    ofs.SetFlavor(oechem.OEFormat_PDB, oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
     ofs.open(out_B)
     oechem.OEWriteMolecule(ofs, complex_B)
     ofs.close()
@@ -45,7 +67,7 @@ def align_complexes(pdb_A, pdb_B, out_B):
     return
 
 
-def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='LIG', ligand_B='LIG'):
+def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B='MOL'):
     """Add ligand B coordinates to coordinate (.gro) file of ligand A in complex with protein
     Parameters
     ----------
@@ -73,6 +95,7 @@ def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='LIG', ligand_B
     for idx, line in enumerate(text_B):
         if ligand_B in line:
             lig2.append(line)
+    print(lig2)
 
     lig1 = []
     # Iterate over complex A, store ligand A lines
@@ -100,6 +123,28 @@ def pdb2gro(pdb, gro):
     #Takes a pdb file and converts it to a .gro file
     pdb = pmd.load_file(pdb)
     pdb.save(gro, overwrite=True)
+
+def ligand_heavyatoms_ndx(traj, ligand='LIG'):
+    """Write index file with ligand heavy atoms for position restraints.
+    Parameters
+    ----------
+    traj : mdtraj trajectory
+        Mdtraj object with coordinates of the system (e.g. from .gro file)
+    ligand : str
+        Three letter code for ligand name
+    Returns
+    -------
+
+    """
+    traj = md.load(traj)
+    topology = traj.topology
+    ligand = topology.select('resname %s' % ligand).tolist()
+    ligand_traj = traj.atom_slice(ligand, inplace=False)
+    topology_ligand = ligand_traj.topology
+    heavy_ligand = topology_ligand.select('resname LIG and not element H').tolist()
+    heavy_ligand = [i+1 for i in heavy_ligand]
+
+    return heavy_ligand
 
 # pdb_A = 'cpd1/complex.pdb'
 # pdb_B = 'cpd6/complex.pdb'

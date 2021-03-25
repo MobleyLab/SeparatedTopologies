@@ -108,9 +108,9 @@ def r3_r12_list(traj, l1, residues2exclude=None):
     min_distance = 1 * unit.angstrom / unit.nanometer
 
     distances = md.geometry.compute_distances(traj, heavy_protein_l1_pairs)[0]
+
     indices_of_in_range_pairs = np.where(np.logical_and(distances > min_distance, distances <= max_distance))[0]
     r3_l1_pairs = heavy_protein_l1_pairs[indices_of_in_range_pairs].tolist()
-
     #Choose a random r3 protein atom that is within 1 - 5 A from L1
     r3 = random.sample(r3_l1_pairs, 1)[0][0]
 
@@ -147,7 +147,7 @@ def _is_collinear(positions, atoms, threshold=0.9):
 
     return result
 
-def atoms_2_restrain(traj):
+def atoms_2_restrain(traj, ligand='LIG'):
     """Select possible protein atoms for Boresch-stylre restraints.
     Parameters
     ----------
@@ -161,7 +161,7 @@ def atoms_2_restrain(traj):
         Number of ligand atoms
     """
     #Get ligand atoms
-    l1, l2, l3, lig_length = select_ligand_atoms(traj)
+    l1, l2, l3, lig_length = select_ligand_atoms(traj, ligand=ligand)
     #Get protein atoms
     r3, r12_list = r3_r12_list(traj, l1)
     complex_coordinates = traj.xyz[:, :, :]
@@ -186,8 +186,6 @@ def atoms_2_restrain(traj):
 
     restrained_atoms = random.sample(restrained_atoms_list, 1)[0]
     # Add one since python starts at 0, .gro file with 1
-    restrained_atoms = [i + 1 for i in restrained_atoms]
-
     return restrained_atoms, lig_length
 
 def compute_dist_angle_dih(complex, restrained_atoms):
@@ -211,11 +209,13 @@ def compute_dist_angle_dih(complex, restrained_atoms):
     dih3 = np.rad2deg(md.compute_dihedrals(complex, [np.array(restrained_atoms[2:6])]))
 
     values = [d, a1, a2, dih1, dih2, dih3]
+    # print(values)
+    restrained_atoms = [i + 1 for i in restrained_atoms]
+    # print(restrained_atoms)
+    return values, restrained_atoms
 
-    return values
 
-
-def write_itp_restraints(restrained_atoms, values, forceconst, file, fc_A = True):
+def write_itp_restraints(restrained_atoms, values, forceconst_A, forceconst_B, file):
     """Compute distance, angles, dihedrals.
     Parameters
     ----------
@@ -231,32 +231,31 @@ def write_itp_restraints(restrained_atoms, values, forceconst, file, fc_A = True
         True: A-state is restrained
         False: A-state is unrestrained (fc=0), B-state is restrained
     """
-    if fc_A == True:
-        fc_dist_a = fc_dist_b = forceconst * 100 * 4.184
-        fc_rad_a = fc_rad_b = forceconst * 4.184
-    else:
-        fc_dist_a = fc_rad_a = 0
-        fc_dist_b = forceconst * 100 * 4.184
-        fc_rad_b = forceconst * 4.184
+
+    fc_dist_a = forceconst_A * 100 * 4.184
+    fc_rad_a = forceconst_A * 4.184
+    fc_dist_b = forceconst_B * 100 * 4.184
+    fc_rad_b = forceconst_B * 4.184
+
     file = open(file, 'w')
     file.write('[ intermolecular_interactions ] \n[ bonds ] \n')
     file.write('; ai     aj    type   bA      kA     bB      kB\n')
     file.write(' %s   %s   6   %.3f   %.1f   %.3f   %.1f\n\n' % (
-    restrained_atoms[2], restrained_atoms[3], values[0], fc_dist_a, values[0], fc_dist_b))
+    restrained_atoms[2], restrained_atoms[3]+2, values[0], fc_dist_a, values[0], fc_dist_b))
     file.write('[ angles ]\n')
     file.write('; ai     aj    ak     type    thA      fcA        thB      fcB\n')
     file.write(' %s   %s   %s   1   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[1], fc_rad_a, values[1], fc_rad_b))
+    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3]+2, values[1], fc_rad_a, values[1], fc_rad_b))
     file.write(' %s   %s   %s   1   %.2f   %.2f   %.2f   %.2f\n\n' % (
-    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[2], fc_rad_a, values[2], fc_rad_b))
+    restrained_atoms[2], restrained_atoms[3]+2, restrained_atoms[4]+2, values[2], fc_rad_a, values[2], fc_rad_b))
     file.write('[ dihedrals ]\n')
     file.write('; ai     aj    ak    al    type     thA      fcA       thB      fcB\n')
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[0], restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[3], fc_rad_a, values[3], fc_rad_b))
+    restrained_atoms[0], restrained_atoms[1], restrained_atoms[2], restrained_atoms[3]+2, values[3], fc_rad_a, values[3], fc_rad_b))
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[4], fc_rad_a, values[4], fc_rad_b))
+    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3]+2, restrained_atoms[4]+2, values[4], fc_rad_a, values[4], fc_rad_b))
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], restrained_atoms[5], values[5], fc_rad_a, values[5], fc_rad_b))
+    restrained_atoms[2], restrained_atoms[3]+2, restrained_atoms[4]+2, restrained_atoms[5]+2, values[5], fc_rad_a, values[5], fc_rad_b))
 
     file.close()
 
@@ -268,43 +267,60 @@ def edit_indices_ligandB(restrained_atoms, ligA_length):
     return restrained_atoms
 
 def include_itp_in_top(top, idpfile):
+    with open(top) as file:
+        newline = ''
+        for line in file:
+            for part in line.split():
+                if 'boresch_restraints' not in part:
+                    newline = '\n#include "%s"'%idpfile
+        file.close()
     file = open(top, 'a')
-    file.write('\n\n#include "%s"'%idpfile)
+    file.write(newline)
     file.close()
 
-def restrain_ligands(complex_A, complex_B, file_A, file_B, fc_A = False):
+def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, ligand='LIG'):
     complex_A = md.load(complex_A)
     complex_B = md.load(complex_B)
     ###Restrained atoms
     ###do that for both ligands separately, then change the ligand atoms of ligandB since in the combined .gro they are different
-    restrained_atoms_A, ligA_length = atoms_2_restrain(complex_A)
-    restrained_atoms_B, ligB_length = atoms_2_restrain(complex_B)
+    restrained_atoms_A, ligA_length = atoms_2_restrain(complex_A, ligand=ligand)
+    restrained_atoms_B, ligB_length = atoms_2_restrain(complex_B, ligand=ligand)
 
     ###Compute distance, angles, dihedrals
-    values_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
-    values_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
+    values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
+    values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
 
     ###write .itp for restraints section
     #Restraining: A state fc_A = 0
-    if fc_A == False:
-        write_itp_restraints(restrained_atoms_A, values_A, 20, file_A, fc_A = False)
-        write_itp_restraints(restrained_atoms_B, values_B, 20, file_B, fc_A = False)
 
-    else:
-
-        #FEC: fc_A = fc_B
-        write_itp_restraints(restrained_atoms_A, values_A, 20, file_A, fc_A = True)
-        #For ligand B add length of ligand A since in combined .gro file
-        restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
-        write_itp_restraints(restrained_atoms_B, values_B, 20, file_B, fc_A = True)
-
-# ###Include section in .top file
-# top_A = 'cpd1/complex.top'
-# top_B = 'cpd6/complex.top'
-#
-# include_itp_in_top(top_A, 'boresch_restraints_A.itp')
-# include_itp_in_top(top_B, 'boresch_restraints_B.itp')
+    write_itp_restraints(restrained_atoms_A, values_A, 0, 20, file_A0)
+    write_itp_restraints(restrained_atoms_B, values_B, 0, 20, file_B0)
 
 
-###Analytically calculate restraining costs
+    #FEC: fc_A = fc_B
+    write_itp_restraints(restrained_atoms_A, values_A, 20, 20, file_A1)
+    #For ligand B add length of ligand A since in combined .gro file
+    restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
+    write_itp_restraints(restrained_atoms_B, values_B, 20, 20, file_B1)
+    return restrained_atoms_A, restrained_atoms_B
 
+def restrain_ligands_boresch_endstate(complex_A, complex_B, file_A0, file_B0, ligand='LIG'):
+    complex_A = md.load(complex_A)
+    complex_B = md.load(complex_B)
+    ###Restrained atoms
+    ###do that for both ligands separately, then change the ligand atoms of ligandB since in the combined .gro they are different
+    restrained_atoms_A, ligA_length = atoms_2_restrain(complex_A, ligand=ligand)
+    restrained_atoms_B, ligB_length = atoms_2_restrain(complex_B, ligand=ligand)
+
+    ###Compute distance, angles, dihedrals
+    values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
+    values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
+
+    ###write .itp for restraints section
+    #Restraining: A state fc_A = 0
+    # For ligand B add length of ligand A since in combined .gro file
+    restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
+    write_itp_restraints(restrained_atoms_A, values_A, 0, 20, file_A0)
+    write_itp_restraints(restrained_atoms_B, values_B, 20, 0, file_B0)
+
+    return restrained_atoms_A, restrained_atoms_B

@@ -3,7 +3,7 @@ import mdtraj as md
 import numpy as np
 
 def rota_bonds(file):
-
+    '''Find rotatable bonds ligand'''
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
@@ -39,11 +39,11 @@ def rota_bonds(file):
                         rot_bond.append(nbor.GetIdx())
                         rot_bond.append(d4)
                         rot_bonds.append(rot_bond)
-
     return rot_bonds
 
 
 def get_dihedrals(file, lig='MOL'):
+    '''Get dihedral around rotatable bond'''
     traj = md.load(file)
     topology = traj.topology
     ligand = topology.select('resname %s' % lig).tolist()
@@ -86,18 +86,30 @@ def write_itp_restraints(dih, values, forceconst_A, forceconst_B, file):
 
     return
 
-fileA = '../2020-02-07_tyk2_ligands/lig_ejm_44/complex/ions.pdb'
-fileB = '../2020-02-07_tyk2_ligands/lig_ejm_42/complex/ions.pdb'
+def restrain_rot_bonds(fileA, fileB, folder):
+    dih_A, values_A, len_ligA = get_dihedrals(fileA)
+    dih, values_B, len_lig = get_dihedrals(fileB)
+    dih_B = []
+    for d in dih:
+        d = [x + len_ligA for x in d]
+        dih_B.append(d)
 
-dih_A, values_A, len_ligA = get_dihedrals(fileA)
-dih, values_B, len_lig = get_dihedrals(fileB)
-dih_B = []
-for d in dih:
-    d = [x+len_ligA for x in d]
-    dih_B.append(d)
+    dih = dih_A + dih_B
+    values = values_A + values_B
+    write_itp_restraints(dih, values, 5, 5, '%s/rot_bonds.itp'%folder)
+    write_itp_restraints(dih, values, 0, 5, '%s/rot_bonds_on.itp' % folder)
+    write_itp_restraints(dih, values, 5, 0, '%s/rot_bonds_off.itp' % folder)
 
-print(dih_B)
+    return
 
-dih = dih_A + dih_B
-values = values_A + values_B
-write_itp_restraints(dih, values, 5, 5, 'dihre.itp')
+def include_itp_in_top(top, idpfile):
+    with open(top) as file:
+        newline = ''
+        for line in file:
+            for part in line.split():
+                if 'rot_bonds' not in part:
+                    newline = '\n#include "%s"'%idpfile
+        file.close()
+    file = open(top, 'a')
+    file.write(newline)
+    file.close()
