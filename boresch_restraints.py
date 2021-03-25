@@ -7,7 +7,6 @@
 import numpy as np
 import mdtraj as md
 import itertools
-import shutil
 from simtk import unit
 from scipy.spatial import distance
 import random
