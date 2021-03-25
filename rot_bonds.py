@@ -58,13 +58,39 @@ def get_dihedrals(file, lig='MOL'):
         values.append(round(float(dih1[0]), 2))
     return dih, values, len_lig
 
-fileA = 'lig_ejm_44/complex/ions.pdb'
-fileB = 'lig_ejm_42/complex/ions.pdb'
+def write_itp_restraints(dih, values, forceconst_A, forceconst_B, file):
+    """Add dihedral restraints
+    Parameters
+    ----------
+    dih: list
+        nested list of ligand atoms selected for restraints
+    values: list
+        List of values for dihedral
+    forceconst_A/B: int
+        forceconstant for restraints (kcal/mol)
+    file: str
+        name of .itp file for restraints (e.g. 'dihre.itp')
+    """
 
-dih, values, len_ligA = get_dihedrals(fileA)
-print(dih)
-print(values)
-dih, values, len_lig = get_dihedrals(fileB)
+    fc_rad_a = forceconst_A * 4.184
+    fc_rad_b = forceconst_B * 4.184
+
+    file = open(file, 'w')
+    file.write('[ intermolecular_interactions ] \n[ dihedrals ] \n')
+    file.write('; ai     aj    ak    al    type     thA      fcA       thB      fcB\n')
+    for inx, d in enumerate(dih):
+        file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
+        d[0], d[1], d[2], d[3], values[inx], fc_rad_a, values[inx], fc_rad_b))
+
+    file.close()
+
+    return
+
+fileA = '../2020-02-07_tyk2_ligands/lig_ejm_44/complex/ions.pdb'
+fileB = '../2020-02-07_tyk2_ligands/lig_ejm_42/complex/ions.pdb'
+
+dih_A, values_A, len_ligA = get_dihedrals(fileA)
+dih, values_B, len_lig = get_dihedrals(fileB)
 dih_B = []
 for d in dih:
     d = [x+len_ligA for x in d]
@@ -72,3 +98,6 @@ for d in dih:
 
 print(dih_B)
 
+dih = dih_A + dih_B
+values = values_A + values_B
+write_itp_restraints(dih, values, 5, 5, 'dihre.itp')
