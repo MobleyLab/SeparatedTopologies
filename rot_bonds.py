@@ -3,7 +3,7 @@ import mdtraj as md
 import numpy as np
 
 def rota_bonds(file):
-    '''Find rotatable bonds ligand'''
+    ''' Find rotatable bonds ligand '''
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
