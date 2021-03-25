@@ -3,25 +3,6 @@ import parmed as pmd
 import shutil
 import mdtraj as md
 
-def align_complexes_mdtraj(pdb_A, pdb_B, out_B):
-    """Align 2 structures with oespruce, Structure A is the reference
-    Parameters
-    ----------
-    pdb_A : str
-        pdb structure Complex A
-    pdb_B : str
-        pdb structure Complex B
-    out_B : str
-        pdb structure Aligned structure of complex B
-    """
-
-    ligand_A = md.load(pdb_A)
-    ligand_B = md.load(pdb_B)
-    ligand_B.superpose(ligand_A)
-    ligand_B.save(out_B)
-
-    return
-
 def align_complexes(pdb_A, pdb_B, out_B):
     """Align 2 structures with oespruce, Structure A is the reference
     Parameters
@@ -40,7 +21,6 @@ def align_complexes(pdb_A, pdb_B, out_B):
                   oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
     ifs.open(pdb_A)
     oechem.OEReadMolecule(ifs, complex_A)
-    # oechem.OEReadPDBFile(ifs, complex_A)
     ifs.close()
 
     complex_B = oechem.OEGraphMol()
@@ -49,7 +29,6 @@ def align_complexes(pdb_A, pdb_B, out_B):
                   oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
     ifs.open(pdb_B)
     oechem.OEReadMolecule(ifs, complex_B)
-    # oechem.OEReadPDBFile(ifs, complex_B)
     ifs.close()
 
     # superposition = oespruce.OEStructuralSuperposition(ref_prot, fit_prot)
@@ -95,7 +74,6 @@ def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B
     for idx, line in enumerate(text_B):
         if ligand_B in line:
             lig2.append(line)
-    print(lig2)
 
     lig1 = []
     # Iterate over complex A, store ligand A lines
@@ -145,16 +123,3 @@ def ligand_heavyatoms_ndx(traj, ligand='LIG'):
     heavy_ligand = [i+1 for i in heavy_ligand]
 
     return heavy_ligand
-
-# pdb_A = 'cpd1/complex.pdb'
-# pdb_B = 'cpd6/complex.pdb'
-#
-# fit_B = 'cpd6/complex_fit.pdb'
-# gro_B = 'cpd6/complex_fit.gro'
-# gro_A = 'cpd1/complex.gro'
-# complex = 'complex.gro'
-# align_complexes(pdb_A, pdb_B, fit_B)
-# #Convert .pdb to .gro
-# pdb2gro(fit_B, gro_B)
-#
-# combine_ligands_gro(gro_A, gro_B, complex)
