@@ -8,7 +8,7 @@ import random
 
 random.seed(8)
 
-
+# is_collinear function from yank
 def _is_collinear(atoms, threshold=0.98):
     """Report whether any sequential vectors in a sequence of atoms are collinear.
     Parameters
@@ -223,7 +223,7 @@ def create_virtual_site(complex_septop, complex_A, lig='MOL'):
         # Find P1 closest to COM
         coordinates_P1, P1, distance_P1_COM = P1_virtual_site(protein_coordinates[0], heavy_protein, com_ligand[0])
         complex_coordinates = traj.xyz[:, :, :]
-        # Find second protein atom that is non colinear with P1 and COM of the ligand (or closest ligand atom)
+        # Find second protein atom that is co-linear with P1 and COM of the ligand (or closest ligand atom)
         P2_list = []
         for r in heavy_protein:
             # restrained_atoms = [P1, L1, r]

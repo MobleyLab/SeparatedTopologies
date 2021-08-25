@@ -8,13 +8,12 @@ def align_complexes(pdb_A, pdb_B, out_B):
     Parameters
     ----------
     pdb_A : str
-        pdb structure Complex A
+       pdb structure Complex A
     pdb_B : str
         pdb structure Complex B
     out_B : str
-        pdb structure Aligned structure of complex B
+        pdb structure, Aligned structure of complex B
     """
-
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
     ifs.SetFlavor(oechem.OEFormat_PDB,
@@ -33,18 +32,18 @@ def align_complexes(pdb_A, pdb_B, out_B):
 
     # superposition = oespruce.OEStructuralSuperposition(ref_prot, fit_prot)
     superposition = oespruce.OEStructuralSuperposition(complex_A, complex_B)
-
     # superposition.Transform(fit_prot)
     superposition.Transform(complex_B)
 
     ofs = oechem.oemolostream()
-    ofs.SetFlavor(oechem.OEFormat_PDB, oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
+    flavor = ofs.GetFlavor(oechem.OEFormat_PDB) ^ oechem.OEOFlavor_PDB_OrderAtoms
+
+    ofs.SetFlavor(oechem.OEFormat_PDB, flavor)
+
     ofs.open(out_B)
     oechem.OEWriteMolecule(ofs, complex_B)
     ofs.close()
-
     return
-
 
 def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B='MOL'):
     """Add ligand B coordinates to coordinate (.gro) file of ligand A in complex with protein

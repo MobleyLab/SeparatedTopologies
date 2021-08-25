@@ -289,17 +289,17 @@ def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, l
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
     values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
 
+    # For ligand B add length of ligand A since in combined .gro file
+    restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
     ###write .itp for restraints section
     #Restraining: A state fc_A = 0
 
     write_itp_restraints(restrained_atoms_A, values_A, 0, 20, file_A0)
-    write_itp_restraints(restrained_atoms_B, values_B, 0, 20, file_B0)
+    write_itp_restraints(restrained_atoms_B, values_B, 20, 0, file_B0)
 
 
     #FEC: fc_A = fc_B
     write_itp_restraints(restrained_atoms_A, values_A, 20, 20, file_A1)
-    #For ligand B add length of ligand A since in combined .gro file
-    restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
     write_itp_restraints(restrained_atoms_B, values_B, 20, 20, file_B1)
     return restrained_atoms_A, restrained_atoms_B
 
