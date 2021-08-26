@@ -1,19 +1,19 @@
 from openeye import oechem, oespruce
 import parmed as pmd
 import shutil
+import mdtraj as md
 
 def align_complexes(pdb_A, pdb_B, out_B):
     """Align 2 structures with oespruce, Structure A is the reference
     Parameters
     ----------
-    pdb_A : pdb structure
-        Complex A
-    pdb_B : pdb structure
-        Complex B
-    out_B : pdb structure
-        Aligned structure of complex B
+    pdb_A : str
+       pdb structure Complex A
+    pdb_B : str
+        pdb structure Complex B
+    out_B : str
+        pdb structure, Aligned structure of complex B
     """
-
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
     ifs.SetFlavor(oechem.OEFormat_PDB,
@@ -32,20 +32,20 @@ def align_complexes(pdb_A, pdb_B, out_B):
 
     # superposition = oespruce.OEStructuralSuperposition(ref_prot, fit_prot)
     superposition = oespruce.OEStructuralSuperposition(complex_A, complex_B)
-
     # superposition.Transform(fit_prot)
     superposition.Transform(complex_B)
 
     ofs = oechem.oemolostream()
-    # ofs.SetFlavor(oechem.OEFormat_PDB, oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
+    flavor = ofs.GetFlavor(oechem.OEFormat_PDB) ^ oechem.OEOFlavor_PDB_OrderAtoms
+
+    ofs.SetFlavor(oechem.OEFormat_PDB, flavor)
+
     ofs.open(out_B)
     oechem.OEWriteMolecule(ofs, complex_B)
     ofs.close()
-
     return
 
-
-def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='LIG', ligand_B='LIG'):
+def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B='MOL'):
     """Add ligand B coordinates to coordinate (.gro) file of ligand A in complex with protein
     Parameters
     ----------
@@ -101,15 +101,91 @@ def pdb2gro(pdb, gro):
     pdb = pmd.load_file(pdb)
     pdb.save(gro, overwrite=True)
 
-# pdb_A = 'cpd1/complex.pdb'
-# pdb_B = 'cpd6/complex.pdb'
-#
-# fit_B = 'cpd6/complex_fit.pdb'
-# gro_B = 'cpd6/complex_fit.gro'
-# gro_A = 'cpd1/complex.gro'
-# complex = 'complex.gro'
-# align_complexes(pdb_A, pdb_B, fit_B)
-# #Convert .pdb to .gro
-# pdb2gro(fit_B, gro_B)
-#
-# combine_ligands_gro(gro_A, gro_B, complex)
+def ligand_heavyatoms_ndx(traj, ligand='LIG'):
+    """Write index file with ligand heavy atoms for position restraints.
+    Parameters
+    ----------
+    traj : mdtraj trajectory
+        Mdtraj object with coordinates of the system (e.g. from .gro file)
+    ligand : str
+        Three letter code for ligand name
+    Returns
+    -------
+
+    """
+    traj = md.load(traj)
+    topology = traj.topology
+    ligand = topology.select('resname %s' % ligand).tolist()
+    ligand_traj = traj.atom_slice(ligand, inplace=False)
+    topology_ligand = ligand_traj.topology
+    heavy_ligand = topology_ligand.select('resname LIG and not element H').tolist()
+    heavy_ligand = [i+1 for i in heavy_ligand]
+
+    return heavy_ligand
+def edit_indices(in_gro, out_gro):
+    """ Edit indices gro coordinate file."""
+
+    file = open(in_gro, 'r')
+    text = file.readlines()
+    file = open(out_gro, 'w')
+    co = 0
+    # Iterate over complex
+    prevline = ''
+    count = 0
+    for idx, line in enumerate(text):
+        if 'MOL' in line and count == 0:
+            count = 1
+            first_MOL_line = idx
+            prev = prevline.split()
+            prev_atomnr = int(prev[2])
+            atomnr = prev_atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+        #if count >= 1 and atomnr != prev_atomnr + 1 and idx < len(text) - 1:
+        if count >= 1 and idx > first_MOL_line and idx < len(text) - 1:
+            atomnr = atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], atomnr, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], atomnr, line[23:])
+        prevline = line
+
+        file.write(line)
+    file.close()
+    return
+
+def edit_indices_solvent(in_gro, out_gro):
+    """ Edit indices gro coordinate file."""
+
+    file = open(in_gro, 'r')
+    text = file.readlines()
+    file = open(out_gro, 'w')
+    co = 0
+    # Iterate over complex
+    prevline = ''
+    count = 0
+    for idx, line in enumerate(text):
+        if 'MOL' in line and count == 0:
+            count = 1
+            first_MOL_line = idx
+            prev = line.split()
+            prev_atomnr = int(prev[2])
+            atomnr = prev_atomnr
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+        #if count >= 1 and atomnr != prev_atomnr + 1 and idx < len(text) - 1:
+        if count >= 1 and idx > first_MOL_line and idx < len(text) - 1:
+            atomnr = atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], atomnr, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], atomnr, line[23:])
+        prevline = line
+
+        file.write(line)
+    file.close()
+    return
