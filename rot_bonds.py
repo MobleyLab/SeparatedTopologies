@@ -1,9 +1,11 @@
 from openeye import oechem
 import mdtraj as md
 import numpy as np
+from openeye.oechem import *
+from openeye.oedepict import *
 
 def rota_bonds(file):
-    ''' Find rotatable bonds ligand '''
+    ''' Find rotatable bonds ligand. Check for symmetry and only include non-symmetric rotatable bonds '''
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
@@ -17,28 +19,51 @@ def rota_bonds(file):
     prot = oechem.OEGraphMol()
     wat = oechem.OEGraphMol()
     other = oechem.OEGraphMol()
-
+    #get ligand
     if oechem.OESplitMolComplex(lig, prot, wat, other, complex_A):
         rot_bonds = []
-        for atom in lig.GetAtoms():
+        OEPerceiveSymmetry(lig)
 
+        for atom in lig.GetAtoms():
             for bond in atom.GetBonds():
                 rot_bond = []
+                #check if bond is rotatable
                 if bond.IsRotor():
+                    #find neighboring atom (atom2)
                     nbor = bond.GetNbr(atom)
+                    #only count bond once (we also loop over neighboring atom, same bond)
                     if nbor.GetIdx() > atom.GetIdx():
+                        symmetry = False
+                        # loop over all atoms that atom1 is connected with, get their symmetry class
+                        sym_a1 = []
                         for a in atom.GetAtoms():
-                            if a.GetIdx() != nbor.GetIdx() and a.IsHydrogen() == False:
-                                d1 = a.GetIdx()
+                            sym = a.GetSymmetryClass()
+                            #if the same symmetry group appears more than once: there is symmetry
+                            if sym in sym_a1:
+                                symmetry = True
+                            sym_a1.append(sym)
+                        # loop over all atoms that atom2 is connected with, get their symmetry class
+                        # do this since symmetry can occur at either side of the rotatable bond
+                        sym_a2 = []
+                        for a in nbor.GetAtoms():
+                            sym = a.GetSymmetryClass()
+                            if sym in sym_a2:
+                                symmetry = True
+                            sym_a2.append(sym)
+                        # if the rotatable bond is not symmetric: save the 4 atoms of that dihedral
+                        if symmetry == False:
+                            for a in atom.GetAtoms():
+                                if a.GetIdx() != nbor.GetIdx() and a.IsHydrogen() == False:
+                                    d1 = a.GetIdx()
 
-                        for n in nbor.GetAtoms():
-                            if n.GetIdx() != atom.GetIdx() and n.IsHydrogen() == False:
-                                d4 = n.GetIdx()
-                        rot_bond.append(d1)
-                        rot_bond.append(atom.GetIdx())
-                        rot_bond.append(nbor.GetIdx())
-                        rot_bond.append(d4)
-                        rot_bonds.append(rot_bond)
+                            for n in nbor.GetAtoms():
+                                if n.GetIdx() != atom.GetIdx() and n.IsHydrogen() == False:
+                                    d4 = n.GetIdx()
+                            rot_bond.append(d1)
+                            rot_bond.append(atom.GetIdx())
+                            rot_bond.append(nbor.GetIdx())
+                            rot_bond.append(d4)
+                            rot_bonds.append(rot_bond)
 
     return rot_bonds
 
