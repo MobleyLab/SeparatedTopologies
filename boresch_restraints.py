@@ -53,10 +53,13 @@ def select_ligand_atoms(traj, ligand='LIG'):
     ifs.close()
     os.unlink(pdb_file.name)
 
+    # Find ring systems (here not specifically aromatic, could change that)
     nr_ring_systems, parts = oechem.OEDetermineRingSystems(lig)
     ring_systems = []
     atoms = []
+    # If we find a ring system in our molecule
     if nr_ring_systems >= 1:
+        #Loop through ringsystems, count number of atoms
         for ringidx in range(1, nr_ring_systems + 1):
             single_ring = []
             nr_atoms = parts.count(ringidx)
@@ -64,7 +67,6 @@ def select_ligand_atoms(traj, ligand='LIG'):
             #store atom indices of ring systems
             for atom in lig.GetAtoms():
                 if parts[atom.GetIdx()] == ringidx:
-
                     single_ring.append(atom.GetIdx())
             atoms.append(single_ring)
         #find largest ring/rings
@@ -73,7 +75,7 @@ def select_ligand_atoms(traj, ligand='LIG'):
         ring_atoms = []
         for lr in largest_ring:
             ring_atoms.extend(atoms[lr])
-
+        #select atoms of that ring system to use for restraints
         ligand_atoms = [heavy_ligand[i] for i in ring_atoms]
         ligand_coordinates = traj.xyz[:, ligand_atoms, :]
 
@@ -155,7 +157,6 @@ def protein_list(traj, l1, residues2exclude=None):
                         helix = []
                         helix.append('resid ' + str(inx))
 
-
                     else:
                         start_helix = False
 
@@ -197,10 +198,8 @@ def protein_list(traj, l1, residues2exclude=None):
         ex = ''.join(ex)
         heavy_protein = topology.select('protein and (backbone or name CB) and not (%s)'%ex).tolist()
 
-    ###Find protein atom R3 within distance of L1
-    # next couple of lines modified from yank.restraints.py
+    #Select atoms that are at least 1nm away from the ligand
     heavy_protein_l1_pairs = np.array(list(itertools.product(heavy_protein, [l1])))
-    # Filter r3-l1 pairs that are too close/far away for the distance constraint.
     min_distance = 10 * unit.angstrom / unit.nanometer
     distances = md.geometry.compute_distances(traj, heavy_protein_l1_pairs)[0]
 
@@ -289,6 +288,8 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
 
     #Protein atoms: should be backbone/CB, part of a helix
     proteinlist = protein_list(traj, l1)
+
+    #If protein atoms are specified by the user: Check that those are appropriate
     if protein_atoms != None:
         if len(protein_atoms) == 3:
             restrained_atoms = [protein_atoms[0], protein_atoms[1], protein_atoms[2], l1, l2, l3]
@@ -306,13 +307,10 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
             elif protein_atoms[0] not in proteinlist and protein_atoms[1] not in proteinlist and protein_atoms[2] not in proteinlist:
                 print('These protein atoms might not be a good selection. Check them (backbone?part of helix?).')
 
-
+    # If no protein atoms are defined: Get protein atoms through automatic selection
     if protein_atoms == None:
-    #Get protein atoms through automatic selection
 
         # pick P1 from this list that passes check_angle
-        # choose first atom that we find
-        # p1s = []
         for p in proteinlist:
             angle_1 = [p, l1, l2]
             a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_1])))
@@ -325,23 +323,9 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
                 p1 = p
                 break
 
-
-        #         p1s.append(p)
-        # #pick P1 that is furthest from L1
-        # dist_p1_l1 = []
-        # for p1 in p1s:
-        #     d = md.compute_distances(traj, [[p1, l1]])
-        #     dist_p1_l1.append(d)
-        # sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_l1))
-        # index_P1 = sorted_distance[-1][1]
-        # p1 = p1s[index_P1]
-
-        # for P2: loop through list and save everything that passes check angle P2-P1-L1
-        # choose first atom that's at minimum distance of 5A from p1
+        # for P2: choose first atom that passes checks and is at minimum distance of 5A from p1
         min_distance = 5 * unit.angstrom / unit.nanometer
 
-
-        # p2s = []
         for p in proteinlist:
             angle_2 = [p, p1, l1]
             a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_2])))
@@ -355,18 +339,6 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
                 if distance > min_distance:
                     p2 = p
                     break
-
-
-                # p2s.append(p)
-        # choose atom furthest from P1
-        # dist_p1_p2 = []
-        # for p2 in p2s:
-        #     d = md.compute_distances(traj, [[p1, p2]])
-        #     dist_p1_p2.append(d)
-        # sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_p2))
-        #
-        # index_P2 = sorted_distance[-1][1]
-        # p2 = p2s[index_P2]
 
         # for P3:loop through list and save everything that passes collinearity test
         p3s = []
@@ -382,7 +354,7 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
             else:
                 continue
         # choose atom furthest from P1 and P2
-        # to do: maybe just choose min distance from P1 and P2?
+        # to do: maybe just choose min distance from P1 and P2 instead of the one furthest away?
         dist_p1_p3 = []
         dist_p2_p3 = []
         for p in p3s:
@@ -398,56 +370,9 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
 
 
         restrained_atoms = [p3,p2,p1,l1,l2,l3]
-        # Add one since python starts at 0, .gro file with 1
+
     return restrained_atoms, lig_length
 
-
-# def atoms_2_restrain(traj, ligand='LIG'):
-#     """Select possible protein atoms for Boresch-style restraints.
-#     Parameters
-#     ----------
-#     traj : str
-#         Mdtraj object with coordinates of the system (e.g. from .gro file)
-#     Returns
-#     -------
-#     restrained_atoms : list
-#         List of indices of 3 protein and 3 ligand atoms selected for Boresch restraints
-#     lig_length: int
-#         Number of ligand atoms
-#     """
-#     #Get ligand atoms
-#     l1, l2, l3, lig_length = select_ligand_atoms(traj, ligand=ligand)
-#     #Get protein atoms
-#     r3, r12_list = r3_r12_list(traj, l1)
-#     complex_coordinates = traj.xyz[:, :, :]
-#     ###Iterate over different R1 and R2 atoms and check collinearity
-#     restrained_atoms_list = []
-#     for r1 in r12_list:
-#
-#         for r2 in r12_list:
-#
-#             restrained_atoms = [r1, r2, r3, l1, l2, l3]
-#             if r1 != r2 and r1 != r3 and r2 != r3:
-#                 collinear = _is_collinear(complex_coordinates[0], restrained_atoms)
-#                 a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([restrained_atoms[1:4]])))
-#                 a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([restrained_atoms[2:5]])))
-#
-#                 check_a1 = check_angle(a1)
-#                 check_a2 = check_angle(a2)
-#
-#                 #only choose atoms that are not collinear and >=5kT from 0 or 180
-#                 if collinear == False and check_a1 == True and check_a2 == True:
-#                     restrained_atoms_list.append(restrained_atoms)
-#
-#                 else:
-#                     continue
-#
-#             else:
-#                 continue
-#
-#     restrained_atoms = random.sample(restrained_atoms_list, 1)[0]
-#     # Add one since python starts at 0, .gro file with 1
-#     return restrained_atoms, lig_length
 
 def compute_dist_angle_dih(complex, restrained_atoms):
     """Compute distance, angles, dihedrals.
