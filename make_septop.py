@@ -162,7 +162,7 @@ def atom_types_ligand(in_top, ligand='LIG'):
             for l in text:
                 if l.startswith(';') or l.startswith('\n'):
                     continue
-                if l.split()[0] == at:
+                if l.split()[0] == at and l not in atomtype:
                     atomtype.append(l)
 
     return atomtype
@@ -195,6 +195,7 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top
     """
 
     atomtype_i = atom_types_ligand(in_top_A, ligand=ligand)
+    print(atomtype_i)
     atomtype_j = atom_types_ligand(in_top_B, ligand=ligand)
     file = open(in_top, 'r')
     text = file.readlines()
