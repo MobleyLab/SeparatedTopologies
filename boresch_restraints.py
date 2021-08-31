@@ -9,9 +9,9 @@ import mdtraj as md
 import itertools
 from simtk import unit
 from scipy.spatial import distance
-import random
-
-random.seed(8)
+from openeye import oechem
+import tempfile
+import os
 
 def select_ligand_atoms(traj, ligand='LIG'):
     """Select three ligand atoms for Boresch-stylre restraints.
@@ -28,15 +28,63 @@ def select_ligand_atoms(traj, ligand='LIG'):
     lig_length: int
         Number of atoms of the ligand
     """
+
     topology = traj.topology
-    #Only consider heavy atoms for restraints
-    heavy_ligand = topology.select('resname %s and not element H'%ligand).tolist()
-    ligand = topology.select('resname %s'%ligand).tolist()
+    # Only consider heavy atoms for restraints
+    heavy_ligand = topology.select('resname %s and not element H' % ligand).tolist()
+    ligand = topology.select('resname %s' % ligand).tolist()
     lig_length = len(ligand)
     ligand_traj = traj.atom_slice(ligand, inplace=False)
-    #Compute the center of mass of the ligand
+
+    # Get openeye molecule from mdtraj via pdb file (code adapted from perses)
+    # create a temporary file with a PDB suffix and save with MDTraj
+    pdb_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdb")
+    ligand_traj.save(pdb_file.name)
+    pdb_file.close()
+
+    # Now use the openeye oemolistream to read in this file as an OEMol:
+    ifs = oechem.oemolistream()
+    ifs.open(pdb_file.name)
+    ifs.SetFormat(oechem.OEFormat_PDB)
+    lig = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, lig)
+
+    # close the stream and delete the temporary pdb file
+    ifs.close()
+    os.unlink(pdb_file.name)
+
+    nr_ring_systems, parts = oechem.OEDetermineRingSystems(lig)
+    ring_systems = []
+    atoms = []
+    if nr_ring_systems >= 1:
+        for ringidx in range(1, nr_ring_systems + 1):
+            single_ring = []
+            nr_atoms = parts.count(ringidx)
+            ring_systems.append(nr_atoms)
+            #store atom indices of ring systems
+            for atom in lig.GetAtoms():
+                if parts[atom.GetIdx()] == ringidx:
+
+                    single_ring.append(atom.GetIdx())
+            atoms.append(single_ring)
+        #find largest ring/rings
+        largest_ring = [i for i, x in enumerate(ring_systems) if x == max(ring_systems)]
+        #Find indices of atoms in largest ring/rings
+        ring_atoms = []
+        for lr in largest_ring:
+            ring_atoms.extend(atoms[lr])
+
+        ligand_atoms = [heavy_ligand[i] for i in ring_atoms]
+        ligand_coordinates = traj.xyz[:, ligand_atoms, :]
+
+    #If no ring systems in molecule just choose all heavy atoms
+    elif nr_ring_systems == 0:
+        ligand_coordinates = traj.xyz[:, heavy_ligand, :]
+        ligand_atoms = heavy_ligand
+
+    # Compute the center of mass of the ligand
     com_ligand = md.compute_center_of_mass(ligand_traj)
-    ligand_coordinates = traj.xyz[:, heavy_ligand, :]
+
     com_distance = []
     #Calculate the distance of ligand atoms to the COM
     for c in ligand_coordinates[0]:
@@ -48,7 +96,7 @@ def select_ligand_atoms(traj, ligand='LIG'):
     #Find ligand heavy atom closest to COM
     index_L1 = sorted_distance[0][1]
     coordinates_L1 = ligand_coordinates[0][index_L1]
-    L1 = heavy_ligand[index_L1]
+    L1 = ligand_atoms[index_L1]
 
     ###Find 2 other heavy atoms near first selected ligand atom
     L1_distance = []
@@ -59,8 +107,8 @@ def select_ligand_atoms(traj, ligand='LIG'):
 
     index_L2 = sorted_distance[1][1]
     index_L3 = sorted_distance[2][1]
-    L2 = heavy_ligand[index_L2]
-    L3 = heavy_ligand[index_L3]
+    L2 = ligand_atoms[index_L2]
+    L3 = ligand_atoms[index_L3]
 
     return L1, L2, L3, lig_length
 
@@ -92,8 +140,10 @@ def protein_list(traj, l1, residues2exclude=None):
         # to DO: maybe also allow beta strands: in general of if no appropriate atoms are found using just helices
         # Loop over all residues, look for start of a helix
         ex = []
+        start_helix = False
+        helix = []
         for inx, b in enumerate(structure):
-            good_helix = False
+
             # discard first 6 and last 6 residues of the protein since they can be floppy
 
             if b == 'H' and 6 < inx < (len(structure) - 6):
@@ -101,22 +151,39 @@ def protein_list(traj, l1, residues2exclude=None):
                 if structure[inx - 1] != 'H':
                     # helix must have at least 6 residues to be considered stable
                     if structure[inx + 1:inx + 6].count('H') == 5:
-                        good_helix = True
-                        res = 'resid ' + str(inx)
-                    else:
-                        good_helix = False
-                        res = ''
-                    ex.append(res)
-                # If this helix is at least 6 residues, add all residues to list
-                else:
-                    if good_helix == True:
-                        res = 'resid ' + str(inx)
+                        start_helix = True
+                        helix = []
+                        helix.append('resid ' + str(inx))
 
-                        ex.append(res)
+
+                    else:
+                        start_helix = False
+
+                # Find end of helix
+                elif structure[inx - 4:inx + 1].count('H') == 5 and structure[inx + 1] != 'H':
+                    end_helix = True
+                    helix.append('resid ' + str(inx))
+                    #Find middle of the helix
+                    middle_helix = (int(len(helix)/2))
+                    #Only choose middle residue + 2 surrounding
+                    ex.append(helix[middle_helix - 3:middle_helix+2])
+
+                # If structure ends with helix account for that
+                elif structure[inx - 4:inx + 1].count('H') == 5 and inx + 1 == (len(structure) - 6):
+                    helix.append('resid ' + str(inx))
+                    # Find middle of the helix
+                    middle_helix = (int(len(helix) / 2))
+                    # Only choose middle residue + 2 surrounding
+                    ex.append(helix[middle_helix - 3:middle_helix + 2])
+                else:
+                    if start_helix == True:
+                        helix.append('resid ' + str(inx))
 
                     else:
                         continue
+        ex = list(itertools.chain.from_iterable(ex))
         ex = ' '.join(ex)
+
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
 
     #if a list of residue indices is provided: exclude those residues
@@ -135,7 +202,6 @@ def protein_list(traj, l1, residues2exclude=None):
     heavy_protein_l1_pairs = np.array(list(itertools.product(heavy_protein, [l1])))
     # Filter r3-l1 pairs that are too close/far away for the distance constraint.
     min_distance = 10 * unit.angstrom / unit.nanometer
-
     distances = md.geometry.compute_distances(traj, heavy_protein_l1_pairs)[0]
 
     indices_of_in_range_pairs = np.where(distances > min_distance)[0]
@@ -165,10 +231,7 @@ def _is_collinear(positions, atoms, threshold=0.9):
     for i in range(len(atoms) - 2):
         v1 = positions[atoms[i + 1], :] - positions[atoms[i], :]
         v2 = positions[atoms[i + 2], :] - positions[atoms[i + 1], :]
-        try:
-            normalized_inner_product = np.dot(v1, v2) / np.sqrt(np.dot(v1, v1) * np.dot(v2, v2))
-        except RuntimeWarning:
-            print(atoms)
+        normalized_inner_product = np.dot(v1, v2) / np.sqrt(np.dot(v1, v1) * np.dot(v2, v2))
         result = result or (normalized_inner_product > threshold)
 
     return result
@@ -188,12 +251,18 @@ def check_angle(angle):
         return False
     return True
 
-def select_Boresch_atoms(traj, ligand='LIG'):
+def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand='LIG'):
     """Select possible protein atoms for Boresch-style restraints.
     Parameters
     ----------
     traj : str
         Mdtraj object with coordinates of the system (e.g. from .gro file)
+    ligand_atoms: list
+        manual selection of three ligand atoms to choose for restraints, list of three indices of ligand atoms
+    protein_atoms: list
+        manual selection of three protein atoms to choose for restraints, list of three indices of protein atoms
+    ligand: str
+        three letter code for the ligand
     Returns
     -------
     restrained_atoms : list
@@ -201,76 +270,135 @@ def select_Boresch_atoms(traj, ligand='LIG'):
     lig_length: int
         Number of ligand atoms
     """
-    #Get ligand atoms
-    l1, l2, l3, lig_length = select_ligand_atoms(traj, ligand=ligand)
-    #Get protein atoms
-    proteinlist = protein_list(traj, l1)
+
     complex_coordinates = traj.xyz[:, :, :]
 
-    # pick P1 from this list that passes check_angle
-    p1s = []
-    for p in proteinlist:
-        angle_1 = [p, l1, l2]
-        a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_1])))
-        check_a1 = check_angle(a1)
-        if check_a1 == True:
-            p1s.append(p)
-    #pick P1 that is furthest from L1
-    dist_p1_l1 = []
-    for p1 in p1s:
-        d = md.compute_distances(traj, [[p1, l1]])
-        dist_p1_l1.append(d)
-    sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_l1))
-    index_P1 = sorted_distance[-1][1]
-    p1 = p1s[index_P1]
-    # for P2: loop through list and save everything that passes check angle P2-P1-L1
-    p2s = []
-    for p in proteinlist:
-        angle_2 = [p, p1, l1]
-        a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_2])))
-        check_a2 = check_angle(a2)
-        if check_a2 == True:
-            p2s.append(p)
-    # choose atom furthest from P1
-    dist_p1_p2 = []
-    for p2 in p2s:
-        d = md.compute_distances(traj, [[p1, p2]])
-        dist_p1_p2.append(d)
-    sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_p2))
+    #If ligand atoms are user defined
+    if ligand_atoms != None:
+        if len(ligand_atoms) == 3:
+            topology = traj.topology
+            ligand = topology.select('resname %s' % ligand).tolist()
+            lig_length = len(ligand)
+            l1, l2, l3 = ligand_atoms[0], ligand_atoms[1], ligand_atoms[2]
+        else:
+            # Three ligand atoms are needed to define restraints
+            print('Three ligand atoms need to be defined')
+    else:
+        #Get ligand atoms through automatic selection
+        l1, l2, l3, lig_length = select_ligand_atoms(traj, ligand=ligand)
 
-    index_P2 = sorted_distance[-1][1]
-    p2 = p2s[index_P2]
-    # for P3:loop through list and save everything that passes collinearity test
-    p3s = []
-    for p in proteinlist:
-        restrained_atoms = [p, p2, p1, l1, l2, l3]
-
-        if p != p2 and p != p1:
+    #Protein atoms: should be backbone/CB, part of a helix
+    proteinlist = protein_list(traj, l1)
+    if protein_atoms != None:
+        if len(protein_atoms) == 3:
+            restrained_atoms = [protein_atoms[0], protein_atoms[1], protein_atoms[2], l1, l2, l3]
+            #Make sure that user defined protein atoms pass collinearity criteria and angle checks
             collinear = _is_collinear(complex_coordinates[0], restrained_atoms)
-            if collinear == False:
-                p3s.append(p)
+            a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([[protein_atoms[1], protein_atoms[2], l1]])))
+            check_a1 = check_angle(a1)
+            a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([[protein_atoms[2],l1,l2]])))
+            check_a2 = check_angle(a2)
+            if collinear == True or check_a1 == False or check_a2 == False:
+                print('Manual selection not appropriate. Continuing with automatic selection for protein atoms')
+                protein_atoms = None
+            # Check if user specified protein atoms are among 'stable ones'
+            # If not, still use them but let user know that these might not be stable
+            elif protein_atoms[0] not in proteinlist and protein_atoms[1] not in proteinlist and protein_atoms[2] not in proteinlist:
+                print('These protein atoms might not be a good selection. Check them (backbone?part of helix?).')
+
+
+    if protein_atoms == None:
+    #Get protein atoms through automatic selection
+
+        # pick P1 from this list that passes check_angle
+        # choose first atom that we find
+        # p1s = []
+        for p in proteinlist:
+            angle_1 = [p, l1, l2]
+            a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_1])))
+            check_a1 = check_angle(a1)
+
+            #check for collinearlity as well (make sure dihedral not 180)
+            dih_1 = [p, l1, l2, l3]
+            collinear = _is_collinear(complex_coordinates[0], dih_1)
+            if check_a1 == True and collinear == False:
+                p1 = p
+                break
+
+
+        #         p1s.append(p)
+        # #pick P1 that is furthest from L1
+        # dist_p1_l1 = []
+        # for p1 in p1s:
+        #     d = md.compute_distances(traj, [[p1, l1]])
+        #     dist_p1_l1.append(d)
+        # sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_l1))
+        # index_P1 = sorted_distance[-1][1]
+        # p1 = p1s[index_P1]
+
+        # for P2: loop through list and save everything that passes check angle P2-P1-L1
+        # choose first atom that's at minimum distance of 5A from p1
+        min_distance = 5 * unit.angstrom / unit.nanometer
+
+
+        # p2s = []
+        for p in proteinlist:
+            angle_2 = [p, p1, l1]
+            a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_2])))
+            check_a2 = check_angle(a2)
+            #check for collinearlity as well (make sure dihedral not 180)
+            dih_2 = [p, p1, l1, l2, l3]
+            collinear = _is_collinear(complex_coordinates[0], dih_2)
+            if check_a2 == True and collinear == False:
+                distance = md.geometry.compute_distances(traj, np.array([[p,p1]]))[0]
+
+                if distance > min_distance:
+                    p2 = p
+                    break
+
+
+                # p2s.append(p)
+        # choose atom furthest from P1
+        # dist_p1_p2 = []
+        # for p2 in p2s:
+        #     d = md.compute_distances(traj, [[p1, p2]])
+        #     dist_p1_p2.append(d)
+        # sorted_distance = sorted((x, y) for y, x in enumerate(dist_p1_p2))
+        #
+        # index_P2 = sorted_distance[-1][1]
+        # p2 = p2s[index_P2]
+
+        # for P3:loop through list and save everything that passes collinearity test
+        p3s = []
+        for p in proteinlist:
+            restrained_atoms = [p, p2, p1, l1, l2, l3]
+
+            if p != p2 and p != p1:
+                collinear = _is_collinear(complex_coordinates[0], restrained_atoms)
+                if collinear == False:
+                    p3s.append(p)
+                else:
+                    continue
             else:
                 continue
-        else:
-            continue
-    # choose atom furthest from P1 and P2
-    dist_p1_p3 = []
-    dist_p2_p3 = []
-    for p in p3s:
-        d = md.compute_distances(traj, [[p1, p]])
-        dist_p1_p3.append(d)
-        d = md.compute_distances(traj, [[p2, p]])
-        dist_p2_p3.append(d)
-    #the maximum of the product of the distances should be where the atom farthest from P1 and P2 is
-    products = [a * b for a, b in zip(dist_p1_p3, dist_p2_p3)]
-    sorted_distance = sorted((x, y) for y, x in enumerate(products))
-    index_P3 = sorted_distance[-1][1]
-    p3 = p3s[index_P3]
+        # choose atom furthest from P1 and P2
+        # to do: maybe just choose min distance from P1 and P2?
+        dist_p1_p3 = []
+        dist_p2_p3 = []
+        for p in p3s:
+            d = md.compute_distances(traj, [[p1, p]])
+            dist_p1_p3.append(d)
+            d = md.compute_distances(traj, [[p2, p]])
+            dist_p2_p3.append(d)
+        #the maximum of the product of the distances should be where the atom farthest from P1 and P2 is
+        products = [a * b for a, b in zip(dist_p1_p3, dist_p2_p3)]
+        sorted_distance = sorted((x, y) for y, x in enumerate(products))
+        index_P3 = sorted_distance[-1][1]
+        p3 = p3s[index_P3]
 
 
-    restrained_atoms = [p3,p2,p1,l1,l2,l3]
-    print(restrained_atoms)
-    # Add one since python starts at 0, .gro file with 1
+        restrained_atoms = [p3,p2,p1,l1,l2,l3]
+        # Add one since python starts at 0, .gro file with 1
     return restrained_atoms, lig_length
 
 
@@ -411,13 +539,14 @@ def include_itp_in_top(top, idpfile):
     file.write(newline)
     file.close()
 
-def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, ligand='LIG'):
+def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, ligand_atoms=None, protein_atoms=None, ligand='LIG'):
     complex_A = md.load(complex_A)
     complex_B = md.load(complex_B)
     ###Restrained atoms
     ###do that for both ligands separately, then change the ligand atoms of ligandB since in the combined .gro they are different
-    restrained_atoms_A, ligA_length = select_Boresch_atoms(complex_A, ligand=ligand)
-    restrained_atoms_B, ligB_length = select_Boresch_atoms(complex_B, ligand=ligand)
+    ###Indices for protein and ligand atoms are 0 based (index from file - 1)
+    restrained_atoms_A, ligA_length = select_Boresch_atoms(complex_A, ligand_atoms=ligand_atoms, protein_atoms=protein_atoms, ligand=ligand)
+    restrained_atoms_B, ligB_length = select_Boresch_atoms(complex_B, ligand_atoms=ligand_atoms, protein_atoms=restrained_atoms_A[:3], ligand=ligand)
 
     ###Compute distance, angles, dihedrals
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
@@ -435,25 +564,4 @@ def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, l
     #FEC: fc_A = fc_B
     write_itp_restraints(restrained_atoms_A, values_A, 20, 20, file_A1)
     write_itp_restraints(restrained_atoms_B, values_B, 20, 20, file_B1)
-    return restrained_atoms_A, restrained_atoms_B
-
-def restrain_ligands_boresch_endstate(complex_A, complex_B, file_A0, file_B0, ligand='LIG'):
-    complex_A = md.load(complex_A)
-    complex_B = md.load(complex_B)
-    ###Restrained atoms
-    ###do that for both ligands separately, then change the ligand atoms of ligandB since in the combined .gro they are different
-    restrained_atoms_A, ligA_length = atoms_2_restrain(complex_A, ligand=ligand)
-    restrained_atoms_B, ligB_length = atoms_2_restrain(complex_B, ligand=ligand)
-
-    ###Compute distance, angles, dihedrals
-    values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
-    values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
-
-    ###write .itp for restraints section
-    #Restraining: A state fc_A = 0
-    # For ligand B add length of ligand A since in combined .gro file
-    restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
-    write_itp_restraints(restrained_atoms_A, values_A, 0, 20, file_A0)
-    write_itp_restraints(restrained_atoms_B, values_B, 20, 0, file_B0)
-
     return restrained_atoms_A, restrained_atoms_B
