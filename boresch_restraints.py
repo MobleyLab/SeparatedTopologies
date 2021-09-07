@@ -1,8 +1,4 @@
 ###Calculate Boresch-style restraints in GROMACS
-#ligand atoms: heavy atoms, L1 closest to COM of ligand, L2,L3 close to L1
-#protein atoms: backbone and CB, R3 within 1-5A of L1, R1 and R2 within 1-8A
-#check that atoms not collinear
-
 
 import numpy as np
 import mdtraj as md
@@ -13,12 +9,19 @@ from openeye import oechem
 import tempfile
 import os
 
-def select_ligand_atoms(traj, ligand='LIG'):
+force_const = 83.68
+R = 8.31445985*0.001  # Gas constant in kJ/mol/K
+T = 298.15
+RT = R*T
+
+def select_ligand_atoms(lig, traj, ligand='LIG'):
     """Select three ligand atoms for Boresch-stylre restraints.
     Parameters
     ----------
+    lig: str
+        mol2 file of the ligand
     traj : str
-        Mdtraj object with coordinates of the system (e.g. from .gro file)
+        Mdtraj object with coordinates of the solvated protein-ligand system (e.g. from .gro file)
     ligand : str
         Three letter code for ligand name
     Returns
@@ -28,7 +31,6 @@ def select_ligand_atoms(traj, ligand='LIG'):
     lig_length: int
         Number of atoms of the ligand
     """
-
     topology = traj.topology
     # Only consider heavy atoms for restraints
     heavy_ligand = topology.select('resname %s and not element H' % ligand).tolist()
@@ -36,25 +38,13 @@ def select_ligand_atoms(traj, ligand='LIG'):
     lig_length = len(ligand)
     ligand_traj = traj.atom_slice(ligand, inplace=False)
 
-    # Get openeye molecule from mdtraj via pdb file (code adapted from perses)
-    # create a temporary file with a PDB suffix and save with MDTraj
-    pdb_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdb")
-    ligand_traj.save(pdb_file.name)
-    pdb_file.close()
-
-    # Now use the openeye oemolistream to read in this file as an OEMol:
-    ifs = oechem.oemolistream()
-    ifs.open(pdb_file.name)
-    ifs.SetFormat(oechem.OEFormat_PDB)
-    lig = oechem.OEGraphMol()
-    oechem.OEReadMolecule(ifs, lig)
-
-    # close the stream and delete the temporary pdb file
-    ifs.close()
-    os.unlink(pdb_file.name)
+    #Load in ligand from mol2 into openeye
+    ifs = oechem.oemolistream(lig)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
 
     # Find ring systems (here not specifically aromatic, could change that)
-    nr_ring_systems, parts = oechem.OEDetermineRingSystems(lig)
+    nr_ring_systems, parts = oechem.OEDetermineRingSystems(mol)
     ring_systems = []
     atoms = []
     # If we find a ring system in our molecule
@@ -65,7 +55,7 @@ def select_ligand_atoms(traj, ligand='LIG'):
             nr_atoms = parts.count(ringidx)
             ring_systems.append(nr_atoms)
             #store atom indices of ring systems
-            for atom in lig.GetAtoms():
+            for atom in mol.GetAtoms():
                 if parts[atom.GetIdx()] == ringidx:
                     single_ring.append(atom.GetIdx())
             atoms.append(single_ring)
@@ -147,7 +137,6 @@ def protein_list(traj, l1, residues2exclude=None):
         for inx, b in enumerate(structure):
 
             # discard first 6 and last 6 residues of the protein since they can be floppy
-
             if b == 'H' and 6 < inx < (len(structure) - 6):
                 # look for a start of a helix
                 if structure[inx - 1] != 'H':
@@ -162,7 +151,6 @@ def protein_list(traj, l1, residues2exclude=None):
 
                 # Find end of helix
                 elif structure[inx - 4:inx + 1].count('H') == 5 and structure[inx + 1] != 'H':
-                    end_helix = True
                     helix.append('resid ' + str(inx))
                     #Find middle of the helix
                     middle_helix = (int(len(helix)/2))
@@ -235,11 +223,6 @@ def _is_collinear(positions, atoms, threshold=0.9):
 
     return result
 
-force_const = 83.68
-R = 8.31445985*0.001  # Gas constant in kJ/mol/K
-T = 298.15
-RT = R*T
-
 def check_angle(angle):
     # check if angle is <5kT from 0 or 180
     check1 = 0.5 * force_const * np.power((angle - 0.0) / 180.0 * np.pi, 2)
@@ -250,16 +233,54 @@ def check_angle(angle):
         return False
     return True
 
-def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand='LIG'):
+def substructure_search(mol2_lig, smarts):
+    """Pick ligand atoms for restraints based on substructure search.
+        Parameters
+        ----------
+        mol2_lig : str
+           mol2 file of the ligand.
+        smarts : str
+            Smarts pattern used for substructure search. One atom is flagged and picked for restraints.
+        Returns
+        -------
+        matches: list
+            Indices of ligand atoms that match the picked atom in the substructure.
+        """
+    ifs = oechem.oemolistream(mol2_lig)
+
+    mol = oechem.OEGraphMol()
+
+    oechem.OEReadMolecule(ifs, mol)
+
+    query = oechem.OEQMol()
+    oechem.OEParseSmarts(query, smarts)
+    substructure_search = oechem.OESubSearch(query)
+
+    matches = []
+
+    for match in substructure_search.Match(mol, True):
+        for matched_atom in match.GetAtoms():
+            if matched_atom.pattern.GetMapIdx() != 0:
+                # add index of matched atom/atoms to matches
+                matches.append(matched_atom.target.GetIdx())
+
+    return matches
+
+def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = None, substructure = None, ligand='LIG'):
     """Select possible protein atoms for Boresch-style restraints.
     Parameters
     ----------
     traj : str
         Mdtraj object with coordinates of the system (e.g. from .gro file)
+    mol2_lig: str
+        mol2 file of the ligand
     ligand_atoms: list
         manual selection of three ligand atoms to choose for restraints, list of three indices of ligand atoms
     protein_atoms: list
         manual selection of three protein atoms to choose for restraints, list of three indices of protein atoms
+    substructure: list
+        List of three strings of SMARTS pattern, each having one atom tagged. Atoms are tagged with :1
+        Ex: ['[#6X3:1]:[#7X2]:[#6X3]', '[#6X3]:[#7X2:1]:[#6X3]', '[#6X3]:[#7X2]:[#6X3:1]']
     ligand: str
         three letter code for the ligand
     Returns
@@ -281,10 +302,30 @@ def select_Boresch_atoms(traj, ligand_atoms = None, protein_atoms = None, ligand
             l1, l2, l3 = ligand_atoms[0], ligand_atoms[1], ligand_atoms[2]
         else:
             # Three ligand atoms are needed to define restraints
-            print('Three ligand atoms need to be defined')
+            raise ValueError('Three ligand atoms need to be defined')
+    # If a substructure (three SMARTS pattern with tagged atoms) is provided by the user
+    elif substructure != None:
+        topology = traj.topology
+        ligand = topology.select('resname %s' % ligand).tolist()
+        lig_length = len(ligand)
+        ligand_atoms = []
+        # For each ligand atom different pattern: List should have length of three
+        if len(substructure) == 3:
+            for pattern in substructure:
+                match = substructure_search(mol2_lig, pattern)
+                if len(match) == 0:
+                    raise ValueError('No match was found')
+                if len(match) > 1:
+                    print('More than one match found. Picking first match.')
+                    ligand_atoms.append(ligand[match[0]])
+                else:
+                    ligand_atoms.append(ligand[match[0]])
+            l1, l2, l3 = ligand_atoms[0], ligand_atoms[1], ligand_atoms[2]
+        else:
+            raise ValueError('Three smarts pattern have to be provided.')
     else:
         #Get ligand atoms through automatic selection
-        l1, l2, l3, lig_length = select_ligand_atoms(traj, ligand=ligand)
+        l1, l2, l3, lig_length = select_ligand_atoms(mol2_lig, traj, ligand=ligand)
 
     #Protein atoms: should be backbone/CB, part of a helix
     proteinlist = protein_list(traj, l1)
@@ -464,14 +505,14 @@ def include_itp_in_top(top, idpfile):
     file.write(newline)
     file.close()
 
-def restrain_ligands(complex_A, complex_B, file_A0, file_B0, file_A1, file_B1, ligand_atoms=None, protein_atoms=None, ligand='LIG'):
+def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B0, file_A1, file_B1, ligand_atoms=None, protein_atoms=None, substructure = None, ligand='LIG'):
     complex_A = md.load(complex_A)
     complex_B = md.load(complex_B)
     ###Restrained atoms
     ###do that for both ligands separately, then change the ligand atoms of ligandB since in the combined .gro they are different
     ###Indices for protein and ligand atoms are 0 based (index from file - 1)
-    restrained_atoms_A, ligA_length = select_Boresch_atoms(complex_A, ligand_atoms=ligand_atoms, protein_atoms=protein_atoms, ligand=ligand)
-    restrained_atoms_B, ligB_length = select_Boresch_atoms(complex_B, ligand_atoms=ligand_atoms, protein_atoms=restrained_atoms_A[:3], ligand=ligand)
+    restrained_atoms_A, ligA_length = select_Boresch_atoms(complex_A, mol2_ligA, ligand_atoms=ligand_atoms, protein_atoms=protein_atoms, substructure=substructure, ligand=ligand)
+    restrained_atoms_B, ligB_length = select_Boresch_atoms(complex_B, mol2_ligB, ligand_atoms=ligand_atoms, protein_atoms=restrained_atoms_A[:3], substructure=substructure, ligand=ligand)
 
     ###Compute distance, angles, dihedrals
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
