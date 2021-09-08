@@ -281,7 +281,7 @@ def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A,
                     scaled_i = "".join(('scaled_', i.split()[0]))
                     for j in atomtype_j:
                         j = "".join(('LIG2_', j.split()[0]))
-                        scaled_j = "".join(('scaled_', i.split()[0]))
+                        scaled_j = "".join(('scaled_', j.split()[0]))
                         nb = i + '  ' + j + '   1   0   0\n'
                         scaled_nb = scaled_i + '  ' + scaled_j + '   1   0   0\n'
                         outtext.append(nb)
