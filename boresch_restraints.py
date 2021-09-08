@@ -1,4 +1,6 @@
 ###Calculate Boresch-style restraints in GROMACS
+#Ligand atoms: largest ring systems, atoms closest to ligand COM
+#protein atoms: middle of a helix, backbone/C-beta, >1nm away from ligand COM, check angles
 
 import numpy as np
 import mdtraj as md
@@ -6,8 +8,6 @@ import itertools
 from simtk import unit
 from scipy.spatial import distance
 from openeye import oechem
-import tempfile
-import os
 
 force_const = 83.68
 R = 8.31445985*0.001  # Gas constant in kJ/mol/K
@@ -506,6 +506,39 @@ def include_itp_in_top(top, idpfile):
     file.close()
 
 def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B0, file_A1, file_B1, ligand_atoms=None, protein_atoms=None, substructure = None, ligand='LIG'):
+    """Select possible protein atoms for Boresch-style restraints, write .itp files for restraints.
+     Parameters
+     ----------
+    complex_A : str
+        coordinates of the system (e.g. from .gro file)
+    complex_B : str
+        coordinates of the system (e.g. from .gro file)
+    mol2_ligA: str
+        mol2 file of the ligand A
+    mol2_ligB: str
+        mol2 file of the ligand B
+    file_A0: str
+        name of .itp file to turn on restraints ligand A
+    file_B0: str
+        name of .itp file to turn off restraints ligand B
+    file_A1: str
+        name of .itp file for ligand A, restraints on in A and B state
+    file_B1: str
+        name of .itp file for ligand B, restraints on in A and B state
+    ligand_atoms: list
+        manual selection of three ligand atoms to choose for restraints, list of three indices of ligand atoms
+    protein_atoms: list
+        manual selection of three protein atoms to choose for restraints, list of three indices of protein atoms
+    substructure: list
+        List of three strings of SMARTS pattern, each having one atom tagged. Atoms are tagged with :1
+        Ex: ['[#6X3:1]:[#7X2]:[#6X3]', '[#6X3]:[#7X2:1]:[#6X3]', '[#6X3]:[#7X2]:[#6X3:1]']
+    ligand: str
+        three letter code for the ligand
+     Returns
+     -------
+     restrained_atoms : list
+         List of indices of 3 protein and 3 ligand atoms selected for Boresch restraints for ligand A and ligand B
+     """
     complex_A = md.load(complex_A)
     complex_B = md.load(complex_B)
     ###Restrained atoms
