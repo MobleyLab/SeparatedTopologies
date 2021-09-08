@@ -28,7 +28,7 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
     prot = complex_A['!(:%s,%s,%s,%s)' % (ligand, water, Na, Cl)]
 
     # Combine different parts
-    sep_top = prot + lig1 + lig2 + NaI + ClI + wat
+    sep_top = prot + lig1 + lig2 + wat + NaI + ClI
     # combine lig1 and lig2 into a single molecule entry
     sep_top.write(septop, [[1, 2]])
 
@@ -72,6 +72,10 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q', lig = 1):
         vdw_dummy
         dummy_vdw
         vdwq_dummy
+        vdwq_scaled-vdw
+        scaled-vdw_dummy
+        dummy_scaled-vdwq
+        scaled-vdwq_vdwq
     lig: int
         if first or second ligand
     Returns
@@ -85,6 +89,7 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q', lig = 1):
         atom_type = "".join(('LIG1_', atom_type))
     if lig == 2:
         atom_type = "".join(('LIG2_', atom_type))
+    scaled_atomtype = "".join(('scaled_', atom_type))
     residue_nr = line.split()[2]
     residue_name = line.split()[3]
     atom_name = line.split()[4]
@@ -133,6 +138,27 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q', lig = 1):
     elif A_B_state == 'vdwq':
         text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
                residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + '\n'
+    # vdw till gamma and charges
+    elif A_B_state == 'vdwq_scaled-vdw':
+        text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+               scaled_atomtype + '   ' + '   0.0    ' + '   ' + mass + '\n'
+        # Turn vdw off from scaled ligand
+    elif A_B_state == 'scaled-vdw_dummy':
+        charge = str(0.0)
+        text = '   ' + atom_number + '   ' + scaled_atomtype + '   ' + residue_nr + '   ' + \
+               residue_name + '   ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + \
+               '   d%s   ' % atom_type + '   ' + charge + '   ' + mass + '\n'
+        # Turn on vdw
+    elif A_B_state == 'dummy_scaled-vdwq':
+        text = '   ' + atom_number + '   d%s   ' % atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + str(0.0) + '   ' + mass + '   ' + \
+               scaled_atomtype + '   ' + charge + '   ' + mass + '\n'
+        # turn on rest of vdw
+    elif A_B_state == 'scaled-vdwq_vdwq':
+        text = '   ' + atom_number + '   ' + scaled_atomtype + '   ' + residue_nr + '  ' + \
+                residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+                atom_type + '   ' + charge + '   ' + mass + '\n'
     else:
         print('Transformation not implemented yet')
 
@@ -167,7 +193,7 @@ def atom_types_ligand(in_top, ligand='LIG'):
 
     return atomtype
 
-def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top_B, ligand='LIG'):
+def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top_B, ligand='LIG'):
     """Create separated topology
     Parameters
     ----------
@@ -175,6 +201,8 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top
         topology file of complex and both ligands (generated from combine_ligands_top)
     out_top: str
         name for output topology file
+    gamma: int
+        scaling parameter for REST scaling
     A_B_state_ligA : str
         Interactions in the A state and in the B state for ligand A.
         vdwq_vdwq: ligand fully interacting in A and B state
@@ -195,7 +223,6 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top
     """
 
     atomtype_i = atom_types_ligand(in_top_A, ligand=ligand)
-    print(atomtype_i)
     atomtype_j = atom_types_ligand(in_top_B, ligand=ligand)
     file = open(in_top, 'r')
     text = file.readlines()
@@ -226,33 +253,39 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top
                         continue
                     else:
                         outtext.append(v)
-                for l in atomtype_i:
-                    new_at = "".join(('LIG1_', l))
-                    at_line = new_at.split()
-                    dummy = 'd' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
-                            2] + ' 0.0 ' + ' A ' + ' 0.0 ' + ' 0.0\n'
+                for atomtype in [atomtype_i, atomtype_j]:
+                    for l in atomtype:
+                        if atomtype == atomtype_i:
+                            new_at = "".join(('LIG1_', l))
+                        elif atomtype == atomtype_j:
+                            new_at = "".join(('LIG2_', l))
+                        at_line = new_at.split()
+                        #Scale the epsilon of the vdw terms by a constant gamma
+                        scaled_at = 'scaled_' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
+                                2] + ' 0.0 ' + ' A ' + at_line[5] + '  ' + str(float(at_line[6])*gamma) + '\n'
 
-                    outtext.append(new_at)
-                    outtext.append(dummy)
+                        ###To do: decide if I only allow those 4 endstates or make it more flexible!!!
 
-                for l in atomtype_j:
-                    new_at = "".join(('LIG2_', l))
-                    at_line = new_at.split()
-                    dummy = 'd' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
-                        2] + ' 0.0 ' + ' A ' + ' 0.0 ' + ' 0.0\n'
+                        dummy = 'd' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
+                                2] + ' 0.0 ' + ' A ' + ' 0.0 ' + ' 0.0\n'
 
-                    outtext.append(new_at)
-                    outtext.append(dummy)
+                        outtext.append(new_at)
+                        outtext.append(scaled_at)
+                        outtext.append(dummy)
 
                 outtext.append('\n\n')
 
                 outtext.append('[ nonbond_params ]\n')
                 for i in atomtype_i:
                     i = "".join(('LIG1_', i.split()[0]))
+                    scaled_i = "".join(('scaled_', i.split()[0]))
                     for j in atomtype_j:
                         j = "".join(('LIG2_', j.split()[0]))
+                        scaled_j = "".join(('scaled_', i.split()[0]))
                         nb = i + '  ' + j + '   1   0   0\n'
+                        scaled_nb = scaled_i + '  ' + scaled_j + '   1   0   0\n'
                         outtext.append(nb)
+                        outtext.append(scaled_nb)
 
                 outtext.append('\n\n')
 
@@ -275,12 +308,7 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top
                         atomindex_j.append(v.split()[0])
                         line = create_A_and_B_state_ligand(v, A_B_state_ligB, lig = 2)
                         outtext.append(line)
-                ###Don't use exclusions section for right now!!!
-                # outtext.append('\n\n[exclusions]\n\n')
-                # add exclusions between all atoms of ligand A and ligand B
-                # for i in atomindex_i:
-                #     line = '  '.join([i] + atomindex_j)
-                #     outtext.append('%s\n' % line)
+
                 outtext.append('\n\n')
             else:
                 outtext.append(key)
