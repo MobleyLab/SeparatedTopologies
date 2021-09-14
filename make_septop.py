@@ -28,13 +28,13 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
     prot = complex_A['!(:%s,%s,%s,%s)' % (ligand, water, Na, Cl)]
 
     # Combine different parts
-    sep_top = prot + lig1 + lig2 + wat + NaI + ClI
+    sep_top = prot + lig1 + lig2 + NaI + ClI + wat
     # combine lig1 and lig2 into a single molecule entry
     sep_top.write(septop, [[1, 2]])
 
     return
 
-
+#Change name of function
 def make_section(text):
     # Create dictionary of different section of the topology file
 
