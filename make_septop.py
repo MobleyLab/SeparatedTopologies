@@ -34,8 +34,7 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
 
     return
 
-#Change name of function
-def make_section(text):
+def make_section_dictionary(text):
     # Create dictionary of different section of the topology file
 
     dic = {}
@@ -235,7 +234,7 @@ def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A,
     section = 0
     while count < end_text:
         # Create dictionary of different sections
-        dic = make_section(text[count:])
+        dic = make_section_dictionary(text[count:])
 
         count += 1
 

@@ -1,10 +1,11 @@
 import rot_bonds as rb
 
-compound_A = '2d'
-compound_B = '2e'
+compound_A = 'era/2d'
+compound_B = 'era/3b'
 lig = 'UNL'
 
-def make_section(text):
+
+def make_section_dictionary(text):
     # Create dictionary of different section of the topology file
 
     dic = {}
@@ -131,7 +132,7 @@ def create_top(in_top, out_top, A_B_state_ligA, ligand='LIG'):
     section = 0
     while count < end_text:
         # Create dictionary of different sections
-        dic = make_section(text[count:])
+        dic = make_section_dictionary(text[count:])
 
         count += 1
 
@@ -209,8 +210,8 @@ def write_itp_restraints(dih, values, forceconst_A, forceconst_B, file):
 
     return
 
-def restrain_rot_bonds(fileA, folder):
-    dih_A, values_A, len_ligA = rb.get_dihedrals(fileA,lig=lig)
+def restrain_rot_bonds(ligand_A, fileA, folder):
+    dih_A, values_A, len_ligA = rb.get_dihedrals(ligand_A, fileA,lig=lig)
     write_itp_restraints(dih_A, values_A, 0, 5, '%s/rot_bonds_on.itp' % folder)
 
     return
@@ -231,6 +232,7 @@ for f in [compound_A, compound_B]:
 #
 #     gromacs = pmd.load_file('%s/%s.top'%(path,f))
 #     gromacs.save('%s/solvent.top'%path, overwrite=True)
+    ligand = '../%s/ligand.mol2'%f
     top = '../%s/solvent.top'%f
     create_top(top, top, 'vdwq_dummy', ligand=lig)
-    restrain_rot_bonds('../%s/solvent.pdb'%f, '../%s'%f)
+    restrain_rot_bonds(ligand,'../%s/solvent.pdb'%f, '../%s'%f)

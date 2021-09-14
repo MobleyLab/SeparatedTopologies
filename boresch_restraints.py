@@ -91,6 +91,7 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
     L1 = ligand_atoms[index_L1]
 
     ###Find 2 other heavy atoms near first selected ligand atom
+    ###If there are multiple rings, could ligand atoms be in different rings??? Change that?
     L1_distance = []
     for c in ligand_coordinates[0]:
         d = distance.euclidean(coordinates_L1, c)
@@ -136,12 +137,15 @@ def protein_list(traj, l1, residues2exclude=None):
         helix = []
         for inx, b in enumerate(structure):
 
-            # discard first 6 and last 6 residues of the protein since they can be floppy
-            if b == 'H' and 6 < inx < (len(structure) - 6):
+            # How many residues of the protein to discard at the beginning and the end since ends can be floppy
+            skip_start = 20
+            skip_end = 6
+            if b == 'H' and skip_start-1 < inx < (len(structure) - skip_end):
                 # look for a start of a helix
                 if structure[inx - 1] != 'H':
-                    # helix must have at least 6 residues to be considered stable
-                    if structure[inx + 1:inx + 6].count('H') == 5:
+                    # number of residues Helix has to consist of to be considered stable
+                    stable_helix = 6
+                    if structure[inx + 1:inx + stable_helix].count('H') == start_helix-1:
                         start_helix = True
                         helix = []
                         helix.append('resid ' + str(inx))
@@ -219,7 +223,8 @@ def _is_collinear(positions, atoms, threshold=0.9):
         v1 = positions[atoms[i + 1], :] - positions[atoms[i], :]
         v2 = positions[atoms[i + 2], :] - positions[atoms[i + 1], :]
         normalized_inner_product = np.dot(v1, v2) / np.sqrt(np.dot(v1, v1) * np.dot(v2, v2))
-        result = result or (normalized_inner_product > threshold)
+
+    result = result or (normalized_inner_product > threshold)
 
     return result
 
@@ -436,9 +441,7 @@ def compute_dist_angle_dih(complex, restrained_atoms):
     dih3 = np.rad2deg(md.compute_dihedrals(complex, [np.array(restrained_atoms[2:6])]))
 
     values = [d, a1, a2, dih1, dih2, dih3]
-    print(values)
     restrained_atoms = [i + 1 for i in restrained_atoms]
-    print(restrained_atoms)
     return values, restrained_atoms
 
 
@@ -505,7 +508,8 @@ def include_itp_in_top(top, idpfile):
     file.write(newline)
     file.close()
 
-def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B0, file_A1, file_B1, ligand_atoms=None, protein_atoms=None, substructure = None, ligand='LIG'):
+def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B0, file_A1, file_B1,
+                     ligand_atoms=None, protein_atoms=None, substructure = None, ligand='LIG'):
     """Select possible protein atoms for Boresch-style restraints, write .itp files for restraints.
      Parameters
      ----------
@@ -551,16 +555,23 @@ def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
     values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
 
+    #If the user defines protein atoms, those are not zero based but have index as in coordinate file
+    if protein_atoms != None:
+        restrained_atoms_B = [i - 1 for i in restrained_atoms_B]
+    print(values_A, restrained_atoms_A)
+    print(values_B, restrained_atoms_B)
+    #user defined protein atoms are not 0 based, but as they appear in the coordinate file
     # For ligand B add length of ligand A since in combined .gro file
     restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
     ###write .itp for restraints section
     #Restraining: A state fc_A = 0
-
-    write_itp_restraints(restrained_atoms_A, values_A, 0, 20, file_A0)
-    write_itp_restraints(restrained_atoms_B, values_B, 20, 0, file_B0)
+    #Restrain distance, angle and dihedral with a force constant of 20 kcal/mol*A2 / kcal/mol*rad2
+    force_constant = 20
+    write_itp_restraints(restrained_atoms_A, values_A, 0, force_constant, file_A0)
+    write_itp_restraints(restrained_atoms_B, values_B, force_constant, 0, file_B0)
 
 
     #FEC: fc_A = fc_B
-    write_itp_restraints(restrained_atoms_A, values_A, 20, 20, file_A1)
-    write_itp_restraints(restrained_atoms_B, values_B, 20, 20, file_B1)
+    write_itp_restraints(restrained_atoms_A, values_A, force_constant, force_constant, file_A1)
+    write_itp_restraints(restrained_atoms_B, values_B, force_constant, force_constant, file_B1)
     return restrained_atoms_A, restrained_atoms_B
