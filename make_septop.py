@@ -17,7 +17,7 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
     """
     complex_A = pmd.load_file(top_A)
     complex_B = pmd.load_file(top_B)
-
+    print(complex_B.residues)
     # Store different molecule_entries separately to be able to assemble the new .top file in the order we want
     lig1 = complex_A[ligand, :]
     lig2 = complex_B[ligand, :]

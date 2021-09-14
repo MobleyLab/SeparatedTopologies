@@ -122,6 +122,76 @@ def ligand_heavyatoms_ndx(traj, ligand='LIG'):
     heavy_ligand = [i+1 for i in heavy_ligand]
 
     return heavy_ligand
+<<<<<<< HEAD
+=======
+def edit_indices(in_gro, out_gro):
+    """ Edit indices gro coordinate file."""
+
+    file = open(in_gro, 'r')
+    text = file.readlines()
+    file = open(out_gro, 'w')
+    co = 0
+    # Iterate over complex
+    prevline = ''
+    count = 0
+    for idx, line in enumerate(text):
+        if 'MOL' in line and count == 0:
+            count = 1
+            first_MOL_line = idx
+            prev = prevline.split()
+            prev_atomnr = int(prev[2])
+            atomnr = prev_atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+        #if count >= 1 and atomnr != prev_atomnr + 1 and idx < len(text) - 1:
+        if count >= 1 and idx > first_MOL_line and idx < len(text) - 1:
+            atomnr = atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], atomnr, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], atomnr, line[23:])
+        prevline = line
+
+        file.write(line)
+    file.close()
+    return
+
+def edit_indices_solvent(in_gro, out_gro):
+    """ Edit indices gro coordinate file."""
+
+    file = open(in_gro, 'r')
+    text = file.readlines()
+    file = open(out_gro, 'w')
+    co = 0
+    # Iterate over complex
+    prevline = ''
+    count = 0
+    for idx, line in enumerate(text):
+        if 'MOL' in line and count == 0:
+            count = 1
+            first_MOL_line = idx
+            prev = line.split()
+            prev_atomnr = int(prev[2])
+            atomnr = prev_atomnr
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], prev_atomnr + 1, line[23:])
+        #if count >= 1 and atomnr != prev_atomnr + 1 and idx < len(text) - 1:
+        if count >= 1 and idx > first_MOL_line and idx < len(text) - 1:
+            atomnr = atomnr + 1
+            if atomnr < 10000:
+                line = '%s %i   %s' % (line[:15], atomnr, line[23:])
+            else:
+                line = '%s%i   %s' % (line[:15], atomnr, line[23:])
+        prevline = line
+
+        file.write(line)
+    file.close()
+    return
+>>>>>>> test
 def edit_indices(in_gro, out_gro):
     """ Edit indices gro coordinate file."""
 
