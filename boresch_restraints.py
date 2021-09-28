@@ -113,6 +113,8 @@ def protein_list(traj, l1, residues2exclude=None):
         Mdtraj object with coordinates of the system (e.g. from .gro file)
     l1 : int
         Index of ligand atom L1 chosen for restraints
+    sec_struc:  str
+        secondary structure element: H for helix, E for strand
     residues2exclude: list
         list of residues (index) to exclude for Boresch atom selection (e.g. flexible loop)
         default = None
@@ -122,30 +124,38 @@ def protein_list(traj, l1, residues2exclude=None):
         list of indices of possible protein atoms
                 """
     topology = traj.topology
-    #select backbone and CB atoms protein
+
     if residues2exclude==None:
         heavy_protein = topology.select('protein and (backbone or name CB)')
         heavy_protein_traj = traj.atom_slice(heavy_protein, inplace=False)
         #Compute secondary structure of residues, output numpy array
-        dssp = md.compute_dssp(heavy_protein_traj)
+        dssp = md.compute_dssp(heavy_protein_traj, simplified=True)
         structure = dssp[0].tolist()
 
-        # to DO: maybe also allow beta strands: in general of if no appropriate atoms are found using just helices
         # Loop over all residues, look for start of a helix
         ex = []
         start_helix = False
         helix = []
+        # How many residues of the protein to discard at the beginning and the end since ends can be floppy
+        skip_start = 20
+        skip_end = 10
+        # number of residues Helix/beta sheet has to consist of to be considered stable
+        stable_helix = 8
+
+        #Check if more helices, more beta sheets in structure, choose predominant one
+        res_in_helix = structure.count('H')
+        res_in_sheet = structure.count('E')
+        if res_in_helix >= res_in_sheet:
+            sec_struc = ['H']
+        else:
+            sec_struc = ['H', 'E']
         for inx, b in enumerate(structure):
 
-            # How many residues of the protein to discard at the beginning and the end since ends can be floppy
-            skip_start = 20
-            skip_end = 6
-            if b == 'H' and skip_start-1 < inx < (len(structure) - skip_end):
+            if b in sec_struc and skip_start-1 < inx < (len(structure) - skip_end):
                 # look for a start of a helix
-                if structure[inx - 1] != 'H':
-                    # number of residues Helix has to consist of to be considered stable
-                    stable_helix = 6
-                    if structure[inx + 1:inx + stable_helix].count('H') == start_helix-1:
+                if structure[inx - 1] != b:
+
+                    if structure[inx + 1:inx + stable_helix].count(b) == stable_helix-1:
                         start_helix = True
                         helix = []
                         helix.append('resid ' + str(inx))
@@ -154,20 +164,16 @@ def protein_list(traj, l1, residues2exclude=None):
                         start_helix = False
 
                 # Find end of helix
-                elif structure[inx - 4:inx + 1].count('H') == 5 and structure[inx + 1] != 'H':
+                elif structure[inx - 4:inx + 1].count(b) == 5 and structure[inx + 1] != b and start_helix == True:
                     helix.append('resid ' + str(inx))
-                    #Find middle of the helix
-                    middle_helix = (int(len(helix)/2))
-                    #Only choose middle residue + 2 surrounding
-                    ex.append(helix[middle_helix - 3:middle_helix+2])
+                    # Leave out first 3 and last 3 residues of loop/sheet
+                    ex.append(helix[3:-3])
 
                 # If structure ends with helix account for that
-                elif structure[inx - 4:inx + 1].count('H') == 5 and inx + 1 == (len(structure) - 6):
+                elif structure[inx - 4:inx + 1].count(b) == 5 and inx + 1 == (len(structure) - 6) and start_helix == True:
                     helix.append('resid ' + str(inx))
-                    # Find middle of the helix
-                    middle_helix = (int(len(helix) / 2))
-                    # Only choose middle residue + 2 surrounding
-                    ex.append(helix[middle_helix - 3:middle_helix + 2])
+                    # Leave out first 3 and last 3 residues of loop/sheet
+                    ex.append(helix[3:-3])
                 else:
                     if start_helix == True:
                         helix.append('resid ' + str(inx))
@@ -176,7 +182,6 @@ def protein_list(traj, l1, residues2exclude=None):
                         continue
         ex = list(itertools.chain.from_iterable(ex))
         ex = ' '.join(ex)
-
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
 
     #if a list of residue indices is provided: exclude those residues
@@ -346,6 +351,8 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
             a2 = np.rad2deg(md.geometry.compute_angles(traj, np.array([[protein_atoms[2],l1,l2]])))
             check_a2 = check_angle(a2)
             if collinear == True or check_a1 == False or check_a2 == False:
+                print(collinear, check_a1, check_a2)
+                print(a1, a2)
                 print('Manual selection not appropriate. Continuing with automatic selection for protein atoms')
                 protein_atoms = None
             # Check if user specified protein atoms are among 'stable ones'
@@ -355,9 +362,8 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
 
     # If no protein atoms are defined: Get protein atoms through automatic selection
     if protein_atoms == None:
-
-        # pick P1 from this list that passes check_angle
         for p in proteinlist:
+
             angle_1 = [p, l1, l2]
             a1 = np.rad2deg(md.geometry.compute_angles(traj, np.array([angle_1])))
             check_a1 = check_angle(a1)
@@ -442,6 +448,9 @@ def compute_dist_angle_dih(complex, restrained_atoms):
 
     values = [d, a1, a2, dih1, dih2, dih3]
     restrained_atoms = [i + 1 for i in restrained_atoms]
+    print(values)
+    print(restrained_atoms)
+
     return values, restrained_atoms
 
 
@@ -556,10 +565,10 @@ def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B
     values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
 
     #If the user defines protein atoms, those are not zero based but have index as in coordinate file
-    if protein_atoms != None:
-        restrained_atoms_B = [i - 1 for i in restrained_atoms_B]
-    print(values_A, restrained_atoms_A)
-    print(values_B, restrained_atoms_B)
+    # if protein_atoms != None:
+    #     restrained_atoms_B = [i - 1 for i in restrained_atoms_B]
+    # print(values_A, restrained_atoms_A)
+    # print(values_B, restrained_atoms_B)
     #user defined protein atoms are not 0 based, but as they appear in the coordinate file
     # For ligand B add length of ligand A since in combined .gro file
     restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
