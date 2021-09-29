@@ -8,6 +8,8 @@ import itertools
 from simtk import unit
 from scipy.spatial import distance
 from openeye import oechem
+import math
+import sys
 
 force_const = 83.68
 R = 8.31445985*0.001  # Gas constant in kJ/mol/K
@@ -288,6 +290,8 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
         manual selection of three ligand atoms to choose for restraints, list of three indices of ligand atoms
     protein_atoms: list
         manual selection of three protein atoms to choose for restraints, list of three indices of protein atoms
+        P1, P2, P3: P3 is used for distance restraint with L1
+        Index of protein atoms is zero based
     substructure: list
         List of three strings of SMARTS pattern, each having one atom tagged. Atoms are tagged with :1
         Ex: ['[#6X3:1]:[#7X2]:[#6X3]', '[#6X3]:[#7X2:1]:[#6X3]', '[#6X3]:[#7X2]:[#6X3:1]']
@@ -446,15 +450,15 @@ def compute_dist_angle_dih(complex, restrained_atoms):
     dih2 = np.rad2deg(md.compute_dihedrals(complex, [np.array(restrained_atoms[1:5])]))
     dih3 = np.rad2deg(md.compute_dihedrals(complex, [np.array(restrained_atoms[2:6])]))
 
-    values = [d, a1, a2, dih1, dih2, dih3]
+    values = [d[0][0], a1[0][0], a2[0][0], dih1[0][0], dih2[0][0], dih3[0][0]]
     restrained_atoms = [i + 1 for i in restrained_atoms]
-    print(values)
-    print(restrained_atoms)
+    print('Boresch values:', values)
+    print('Boresch atoms:', restrained_atoms)
 
     return values, restrained_atoms
 
 
-def write_itp_restraints(restrained_atoms, values, forceconst_A, forceconst_B, file):
+def write_itp_restraints(restrained_atoms, values, fc_A, fc_B, file):
     """Compute distance, angles, dihedrals.
     Parameters
     ----------
@@ -471,30 +475,25 @@ def write_itp_restraints(restrained_atoms, values, forceconst_A, forceconst_B, f
         False: A-state is unrestrained (fc=0), B-state is restrained
     """
 
-    fc_dist_a = forceconst_A * 100 * 4.184
-    fc_rad_a = forceconst_A * 4.184
-    fc_dist_b = forceconst_B * 100 * 4.184
-    fc_rad_b = forceconst_B * 4.184
-
     file = open(file, 'w')
     file.write('[ intermolecular_interactions ] \n[ bonds ] \n')
     file.write('; ai     aj    type   bA      kA     bB      kB\n')
     file.write(' %s   %s   6   %.3f   %.1f   %.3f   %.1f\n\n' % (
-    restrained_atoms[2], restrained_atoms[3], values[0], fc_dist_a, values[0], fc_dist_b))
+    restrained_atoms[2], restrained_atoms[3], values[0], fc_A[0], values[0], fc_B[0]))
     file.write('[ angles ]\n')
     file.write('; ai     aj    ak     type    thA      fcA        thB      fcB\n')
     file.write(' %s   %s   %s   1   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[1], fc_rad_a, values[1], fc_rad_b))
+    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[1], fc_A[1], values[1], fc_B[1]))
     file.write(' %s   %s   %s   1   %.2f   %.2f   %.2f   %.2f\n\n' % (
-    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[2], fc_rad_a, values[2], fc_rad_b))
+    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[2], fc_A[2], values[2], fc_B[2]))
     file.write('[ dihedrals ]\n')
     file.write('; ai     aj    ak    al    type     thA      fcA       thB      fcB\n')
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[0], restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[3], fc_rad_a, values[3], fc_rad_b))
+    restrained_atoms[0], restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], values[3], fc_A[3], values[3], fc_B[3]))
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[4], fc_rad_a, values[4], fc_rad_b))
+    restrained_atoms[1], restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], values[4], fc_A[4], values[4], fc_B[3]))
     file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
-    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], restrained_atoms[5], values[5], fc_rad_a, values[5], fc_rad_b))
+    restrained_atoms[2], restrained_atoms[3], restrained_atoms[4], restrained_atoms[5], values[5], fc_A[5], values[5], fc_B[3]))
 
     file.close()
 
@@ -516,6 +515,19 @@ def include_itp_in_top(top, idpfile):
     file = open(top, 'a')
     file.write(newline)
     file.close()
+
+def dist_correction_fc_angle(dist_x):
+    # the length of the distance has an impact on the mobility of the ligand (arc length of sperical shell that
+    # it can move on --> increase the force constant of the angle 1 quadratically with the distance
+    # at a distance of 5A --> fc = 40 kcal/mol*rad2
+
+    dist_0 = 0.5
+
+    fc_0 = 167.36 #40 kcal/mol*rad2 at a distance of 5A
+
+    fc_x = round((dist_x/dist_0)**2 * fc_0,2)
+
+    return fc_x
 
 def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B0, file_A1, file_B1,
                      ligand_atoms=None, protein_atoms=None, substructure = None, ligand='LIG'):
@@ -564,23 +576,56 @@ def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB, file_A0, file_B
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
     values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
 
-    #If the user defines protein atoms, those are not zero based but have index as in coordinate file
-    # if protein_atoms != None:
-    #     restrained_atoms_B = [i - 1 for i in restrained_atoms_B]
-    # print(values_A, restrained_atoms_A)
-    # print(values_B, restrained_atoms_B)
-    #user defined protein atoms are not 0 based, but as they appear in the coordinate file
+
     # For ligand B add length of ligand A since in combined .gro file
     restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
+
+    # Typically we restrain everything with 20 kcal/mol; here given in kJ/mol
+    fc = 20 * 4.184
+
+    # Get the force constant for the angle 1 which depends on the length of the distance restraint
+    fc_thA_A = dist_correction_fc_angle(values_A[0])
+    fc_thA_B = dist_correction_fc_angle(values_B[0])
+
+    dG_A_off_analytical = analytical_Boresch_correction(values_A[0], values_A[1], values_A[2], fc, fc_thA_A,
+                                                        fc, fc, fc, fc, T=298.15)
+
+    dG_B_off_analytical = analytical_Boresch_correction(values_B[0], values_B[1], values_B[2], fc, fc_thA_B,
+                                                        fc, fc, fc, fc, T=298.15)
+    dG_B_on_analytical = -dG_B_off_analytical
     ###write .itp for restraints section
     #Restraining: A state fc_A = 0
     #Restrain distance, angle and dihedral with a force constant of 20 kcal/mol*A2 / kcal/mol*rad2
-    force_constant = 20
-    write_itp_restraints(restrained_atoms_A, values_A, 0, force_constant, file_A0)
-    write_itp_restraints(restrained_atoms_B, values_B, force_constant, 0, file_B0)
+
+    #Force constant for distance, 2 angles, 3 dihedrals
+    force_const_lig_A = [fc*100, fc_thA_A, fc, fc, fc, fc]
+    force_const_lig_B = [fc*100, fc_thA_B, fc, fc, fc, fc]
+    force_const_0 = [0,0,0,0,0,0]
+    write_itp_restraints(restrained_atoms_A, values_A, force_const_0, force_const_lig_A, file_A0)
+    write_itp_restraints(restrained_atoms_B, values_B, force_const_lig_B, force_const_0, file_B0)
 
 
     #FEC: fc_A = fc_B
-    write_itp_restraints(restrained_atoms_A, values_A, force_constant, force_constant, file_A1)
-    write_itp_restraints(restrained_atoms_B, values_B, force_constant, force_constant, file_B1)
-    return restrained_atoms_A, restrained_atoms_B
+    write_itp_restraints(restrained_atoms_A, values_A, force_const_lig_A, force_const_lig_A, file_A1)
+    write_itp_restraints(restrained_atoms_B, values_B, force_const_lig_B, force_const_lig_B, file_B1)
+    return restrained_atoms_A, restrained_atoms_B, round(dG_A_off_analytical,3), round(dG_B_on_analytical,3)
+
+
+def analytical_Boresch_correction(r0, thA, thB, fc_r, fc_thA, fc_thB, fc_phiA, fc_phiB, fc_phiC, T=298.15):
+    #Analytical correction orientational restraints, equation 14 from Boresch 2003 paper doi 10.1021/jp0217839
+    K = 8.314472 * 0.001  # Gas constant in kJ/mol/K
+    V = 1.66  # standard volume in nm^3
+    # distance: Force constants in kJ/mol*nm2
+    fc_r = fc_r * 100
+
+    thA = math.radians(thA)  # get angle in radians
+    thB = math.radians(thB)  # get angle in radians
+
+    # dG for turning Boresch restraints off (switch sign if you want to turn them on)
+    dG = - K * T * math.log(((8.0 * math.pi ** 2.0 * V) / (r0 ** 2.0 * math.sin(thA) * math.sin(thB))
+            *
+            (((fc_r * fc_thA * fc_thB * fc_phiA * fc_phiB * fc_phiC) ** 0.5) / ((2.0 * math.pi * K * T) ** (3.0)))))
+
+    #dG in kcal mol
+    dG = dG / 4.184
+    return dG
