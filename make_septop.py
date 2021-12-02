@@ -4,7 +4,7 @@ Functions to build the separated topology of two ligands.
 
 import parmed as pmd
 
-def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+', Cl='Cl-'):
+def combine_ligands_top(top_A, top_B, septop, ligand='LIG'):
     """Create a combined topology file of the complex A and ligand B. Insert ligand B into the same molecule section as ligand A.
     Parameters
     ----------
@@ -17,20 +17,27 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
     """
     complex_A = pmd.load_file(top_A)
     complex_B = pmd.load_file(top_B)
-    print(complex_B.residues)
-    # Store different molecule_entries separately to be able to assemble the new .top file in the order we want
-    lig1 = complex_A[ligand, :]
-    lig2 = complex_B[ligand, :]
-    # Choose the protein, water and ions from complex A
-    wat = complex_A[water, :]
-    ClI = complex_A[Cl, :]
-    NaI = complex_A[Na, :]
-    prot = complex_A['!(:%s,%s,%s,%s)' % (ligand, water, Na, Cl)]
 
-    # Combine different parts
-    sep_top = prot + lig1 + lig2 + NaI + ClI + wat
-    # combine lig1 and lig2 into a single molecule entry
-    sep_top.write(septop, [[1, 2]])
+    # Grab ligand B from complex B
+    lig2 = complex_B[ligand, :]
+
+    #Find residue number ligand A
+    for res_nr, res in enumerate(complex_A.residues):
+        if res.name == ligand:
+            ligand_res_nr = res_nr
+
+    #Split complex into individial molecules ( [ moleculetype ] sections GROMACS)
+    split_A = complex_A.split()
+
+    #Find index of the [ moleculetype ] section of ligand A
+    for ind,i in enumerate(split_A):
+        if i[0].residues[0].name == ligand:
+            lig1_pos = ind
+
+    #Create new topology where ligand B is inserted directly after ligand A
+    sep_top = complex_A[:ligand_res_nr+1, :] + lig2 + complex_A[ligand_res_nr+1:, :]
+    # combine ligA and ligB into a single molecule entry based on index [ moleculetype ] secion ligand
+    sep_top.write(septop, [[lig1_pos, lig1_pos+1]])
 
     return
 
