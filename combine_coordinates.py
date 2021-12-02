@@ -99,7 +99,13 @@ def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B
 def pdb2gro(pdb, gro):
     #Takes a pdb file and converts it to a .gro file
     pdb = pmd.load_file(pdb)
+    print(pdb)
     pdb.save(gro, overwrite=True)
+
+def gro2pdb(gro, pdb):
+    #Takes a pdb file and converts it to a .gro file
+    gro = pmd.load_file(gro)
+    gro.save(pdb, overwrite=True)
 
 def ligand_heavyatoms_ndx(traj, ligand='LIG'):
     """Write index file with ligand heavy atoms for position restraints.
