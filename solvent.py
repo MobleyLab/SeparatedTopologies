@@ -1,8 +1,8 @@
 import parmed as pmd
-
-compound_A = 'lig_ejm_44'
-compound_B = 'lig_ejm_42'
-lig = 'MOL'
+from SeparatedTopologies import ligand_files as lf
+from SeparatedTopologies import rot_bonds as rotbond
+import mdtraj as md
+import numpy as np
 
 def make_section(text):
     # Create dictionary of different section of the topology file
@@ -179,20 +179,59 @@ def create_top(in_top, out_top, A_B_state_ligA, ligand='LIG'):
 
     return out_top
 
-for f in [compound_A, compound_B]:
-    path = '../2020-02-07_tyk2_ligands/%s/water' % f
-    a_file = open('%s/%s.top'%(path,f), 'r')
-    lines = a_file.readlines()
-    a_file.close()
-    file = open('%s/%s.top'%(path,f), 'w')
-    for line in lines:
-        if '"amber99sb' in line:
-            line = '%s "../../%s\n'%(line.split()[0], line.split()[1][1:])
-        file.writelines(line)
+def write_itp_restraints(dih, values, forceconst_A, forceconst_B, file):
+    """Add dihedral restraints
+    Parameters
+    ----------
+    dih: list
+        nested list of ligand atoms selected for restraints
+    values: list
+        List of values for dihedral
+    forceconst_A/B: int
+        forceconstant for restraints (kcal/mol)
+    file: str
+        name of .itp file for restraints (e.g. 'dihre.itp')
+    """
+
+    fc_rad_a = forceconst_A * 4.184
+    fc_rad_b = forceconst_B * 4.184
+
+    file = open(file, 'w')
+    file.write('[ intermolecular_interactions ] \n[ dihedrals ] \n')
+    file.write('; ai     aj    ak    al    type     thA      fcA       thB      fcB\n')
+    for inx, d in enumerate(dih):
+        file.write(' %s   %s   %s   %s   2   %.2f   %.2f   %.2f   %.2f\n' % (
+        d[0], d[1], d[2], d[3], values[inx], fc_rad_a, values[inx], fc_rad_b))
+
     file.close()
 
-    gromacs = pmd.load_file('%s/%s.top'%(path,f))
-    gromacs.save('%s/solvent.top'%path, overwrite=True)
-    top = '%s/solvent.top'%path
-    create_top(top, top, 'vdwq_dummy', ligand=lig)
+    return
+
+def get_dihedrals(ligand,solvent,complex, lig):
+    '''Get dihedral around rotatable bond'''
+    traj = md.load(complex)
+    topology = traj.topology
+    ligand_top = topology.select('resname %s' % lig).tolist()
+    len_lig = len(ligand_top)
+    print(len_lig)
+    rot_bonds = rotbond.rota_bonds(ligand)
+    traj_solvent = md.load(solvent)
+    topology_solvent = traj_solvent.topology
+    ligand_top_solvent = topology_solvent.select('resname UNL').tolist()
+    print(len(ligand_top_solvent))
+    dih = []
+    values = []
+    for rb in rot_bonds:
+        rb_solvent = [ligand_top_solvent[r] for r in rb]
+        rb = [ligand_top[r] for r in rb]
+        dih1 = np.rad2deg(md.compute_dihedrals(traj, [np.array(rb)]))
+        dih.append([r + 1 for r in rb_solvent])
+        values.append(round(float(dih1[0]), 2))
+    return dih, values, len_lig
+
+def restrain_rot_bonds(ligand, solvent,pdb,lig,folder):
+    dih_A, values_A, len_ligA = get_dihedrals(ligand,solvent,pdb,lig)
+    write_itp_restraints(dih_A, values_A, 0, 5, '%s/rot_bonds_on.itp' % folder)
+
+    return
 

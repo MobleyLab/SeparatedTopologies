@@ -3,10 +3,8 @@ Functions to build the separated topology of two ligands.
 """
 
 import parmed as pmd
-from SeparatedTopologies import virtual_site as visi
 
-
-def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+', Cl='Cl-'):
+def combine_ligands_top(top_A, top_B, septop, ligand='LIG'):
     """Create a combined topology file of the complex A and ligand B. Insert ligand B into the same molecule section as ligand A.
     Parameters
     ----------
@@ -20,24 +18,30 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG', water='HOH', Na='Na+
     complex_A = pmd.load_file(top_A)
     complex_B = pmd.load_file(top_B)
 
-    # Store different molecule_entries separately to be able to assemble the new .top file in the order we want
-    lig1 = complex_A[ligand, :]
+    # Grab ligand B from complex B
     lig2 = complex_B[ligand, :]
-    # Choose the protein, water and ions from complex A
-    wat = complex_A[water, :]
-    ClI = complex_A[Cl, :]
-    NaI = complex_A[Na, :]
-    prot = complex_A['!(:%s,%s,%s,%s)' % (ligand, water, Na, Cl)]
 
-    # Combine different parts
-    sep_top = prot + lig1 + lig2 + wat + NaI + ClI
-    # combine lig1 and lig2 into a single molecule entry
-    sep_top.write(septop, [[1, 2]])
+    #Find residue number ligand A
+    for res_nr, res in enumerate(complex_A.residues):
+        if res.name == ligand:
+            ligand_res_nr = res_nr
+
+    #Split complex into individial molecules ( [ moleculetype ] sections GROMACS)
+    split_A = complex_A.split()
+
+    #Find index of the [ moleculetype ] section of ligand A
+    for ind,i in enumerate(split_A):
+        if i[0].residues[0].name == ligand:
+            lig1_pos = ind
+
+    #Create new topology where ligand B is inserted directly after ligand A
+    sep_top = complex_A[:ligand_res_nr+1, :] + lig2 + complex_A[ligand_res_nr+1:, :]
+    # combine ligA and ligB into a single molecule entry based on index [ moleculetype ] secion ligand
+    sep_top.write(septop, [[lig1_pos, lig1_pos+1]])
 
     return
 
-
-def make_section(text):
+def make_section_dictionary(text):
     # Create dictionary of different section of the topology file
 
     dic = {}
@@ -60,7 +64,7 @@ def make_section(text):
     return dic
 
 
-def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
+def create_A_and_B_state_ligand(line, A_B_state='vdwq_q', lig = 1):
     """Create A and B state topology for a ligand.
     Parameters
     ----------
@@ -74,6 +78,12 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
         vdw_dummy
         dummy_vdw
         vdwq_dummy
+        vdwq_scaled-vdw
+        scaled-vdw_dummy
+        dummy_scaled-vdwq
+        scaled-vdwq_vdwq
+    lig: int
+        if first or second ligand
     Returns
     -------
     text : str
@@ -81,6 +91,11 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
     """
     atom_number = line.split()[0]
     atom_type = line.split()[1]
+    if lig == 1:
+        atom_type = "".join(('LIG1_', atom_type))
+    if lig == 2:
+        atom_type = "".join(('LIG2_', atom_type))
+    scaled_atomtype = "".join(('scaled_', atom_type))
     residue_nr = line.split()[2]
     residue_name = line.split()[3]
     atom_name = line.split()[4]
@@ -90,7 +105,9 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
 
     # A and B state are the same
     if A_B_state == 'vdwq_vdwq':
-        text = line.split(';')[0] + '   ' + atom_type + '   ' + charge + '   ' + mass + '\n'
+        text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+               atom_type + '   ' + charge + '   ' + mass + '\n'
     # Turn on vdw
     elif A_B_state == 'dummy_vdw':
         charge = str(0.0)
@@ -105,10 +122,14 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
                '   d%s   ' % atom_type + '   ' + charge + '   ' + mass + '\n'
     # Turn vdw and electrostatics off
     elif A_B_state == 'vdwq_dummy':
-        text = line.split(';')[0] + '   ' + '  d%s  ' % atom_type + '   0.0    ' + mass + '\n'
+        text = '   ' + atom_number + '   ' + atom_type + '   ' + residue_nr + '   ' + \
+               residue_name + '   ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + \
+               '   d%s   ' % atom_type + '   ' + '   0.0    ' + '   ' + mass + '\n'
     # uncharge
     elif A_B_state == 'vdwq_vdw':
-        text = line.split(';')[0] + '   ' + '   ' + atom_type + '   0.0    ' + mass + '\n'
+        text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+               atom_type + '   ' + '   0.0    ' + '   ' + mass + '\n'
     # charge
     elif A_B_state == 'vdw_vdwq':
         text = '   ' + atom_number + '   ' + atom_type + '   ' + residue_nr + '  ' + \
@@ -121,14 +142,64 @@ def create_A_and_B_state_ligand(line, A_B_state='vdwq_q'):
                residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + '\n'
     # Turn vdw and electrostatics off
     elif A_B_state == 'vdwq':
-        text = line.split(';')[0] + '\n'
+        text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + '\n'
+    # vdw till gamma and charges
+    elif A_B_state == 'vdwq_scaled-vdw':
+        text = '   ' + atom_number + '  ' + atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+               scaled_atomtype + '   ' + '   0.0    ' + '   ' + mass + '\n'
+        # Turn vdw off from scaled ligand
+    elif A_B_state == 'scaled-vdw_dummy':
+        charge = str(0.0)
+        text = '   ' + atom_number + '   ' + scaled_atomtype + '   ' + residue_nr + '   ' + \
+               residue_name + '   ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + \
+               '   d%s   ' % atom_type + '   ' + charge + '   ' + mass + '\n'
+        # Turn on vdw
+    elif A_B_state == 'dummy_scaled-vdwq':
+        text = '   ' + atom_number + '   d%s   ' % atom_type + '   ' + residue_nr + '  ' + \
+               residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + str(0.0) + '   ' + mass + '   ' + \
+               scaled_atomtype + '   ' + charge + '   ' + mass + '\n'
+        # turn on rest of vdw
+    elif A_B_state == 'scaled-vdwq_vdwq':
+        text = '   ' + atom_number + '   ' + scaled_atomtype + '   ' + residue_nr + '  ' + \
+                residue_name + '  ' + atom_name + '   ' + cgnr + '   ' + charge + '   ' + mass + '   ' + \
+                atom_type + '   ' + charge + '   ' + mass + '\n'
     else:
         print('Transformation not implemented yet')
 
     return text
 
+def atom_types_ligand(in_top, ligand='LIG'):
+    """Store atom types ligand in a list. Atom types have to come from individual ligand files, because parmed just
+    combines different atom types to a single one if they have the same name.
+    Parameters
+    ----------
+    in_top : str
+        topology file of complex and both ligands (generated from combine_ligands_top)
+    ligand = str
+        three letter code for the ligand residue, default = 'LIG'
+    """
 
-def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, complex_A, ligand='LIG'):
+    file = open(in_top, 'r')
+    text = file.readlines()
+    file.close()
+    end_text = len(text)
+    # at = []
+    atomtype = []
+    for line in text:
+
+        if ligand in line and not line.startswith(';') and line.split()[0].isdigit():
+            at = line.split()[1]
+            for l in text:
+                if l.startswith(';') or l.startswith('\n'):
+                    continue
+                if l.split()[0] == at and l not in atomtype:
+                    atomtype.append(l)
+
+    return atomtype
+
+def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A, in_top_B, ligand='LIG'):
     """Create separated topology
     Parameters
     ----------
@@ -136,6 +207,8 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
         topology file of complex and both ligands (generated from combine_ligands_top)
     out_top: str
         name for output topology file
+    gamma: int
+        scaling parameter for REST scaling
     A_B_state_ligA : str
         Interactions in the A state and in the B state for ligand A.
         vdwq_vdwq: ligand fully interacting in A and B state
@@ -155,6 +228,8 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
     Turn off vdw ligand A: create_top(top, turnoff_vdw_A, 'vdw_dummy', 'vdwq_vdwq')
     """
 
+    atomtype_i = atom_types_ligand(in_top_A, ligand=ligand)
+    atomtype_j = atom_types_ligand(in_top_B, ligand=ligand)
     file = open(in_top, 'r')
     text = file.readlines()
     file.close()
@@ -166,7 +241,7 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
     section = 0
     while count < end_text:
         # Create dictionary of different sections
-        dic = make_section(text[count:])
+        dic = make_section_dictionary(text[count:])
 
         count += 1
 
@@ -175,36 +250,52 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
             # For every atomtype add a dummy-atomtype with no vdW interactions
             if 'atomtypes' in key:
                 outtext.append(key)
-                outtext.append(value)
                 for v in value:
                     if v.startswith(';') or v.startswith('\n'):
                         continue
+                    if v.split()[0] in [l.split()[0] for l in atomtype_i]:
+                        continue
+                    if v.split()[0] in [l.split()[0] for l in atomtype_j]:
+                        continue
                     else:
-                        at_line = v.split()
+                        outtext.append(v)
+                for inx,atomtype in enumerate([atomtype_i, atomtype_j]):
+                    for l in atomtype:
+                        if inx == 0:
+                            new_at = "".join(('LIG1_', l))
+                        elif inx == 1:
+                            new_at = "".join(('LIG2_', l))
+                        at_line = new_at.split()
+                        #Scale the epsilon of the vdw terms by a constant gamma
+                        scaled_at = 'scaled_' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
+                                2] + ' 0.0 ' + ' A ' + at_line[5] + '  ' + str(float(at_line[6])*gamma) + '\n'
+
+                        ###To do: decide if I only allow those 4 endstates or make it more flexible!!!
+
                         dummy = 'd' + at_line[0] + '       ' + at_line[1] + '     ' + at_line[
-                            2] + ' 0.0 ' + ' A ' + ' 0.0 ' + ' 0.0\n'
+                                2] + ' 0.0 ' + ' A ' + ' 0.0 ' + ' 0.0\n'
+
+                        outtext.append(new_at)
+                        outtext.append(scaled_at)
                         outtext.append(dummy)
-                outtext.append('VS    VS  0.0000 0.0000  D  0.0 0.0')
+
+                outtext.append('\n\n')
+
+                outtext.append('[ nonbond_params ]\n')
+                for i in atomtype_i:
+                    i = "".join(('LIG1_', i.split()[0]))
+                    scaled_i = "".join(('scaled_', i.split()[0]))
+                    for j in atomtype_j:
+                        j = "".join(('LIG2_', j.split()[0]))
+                        scaled_j = "".join(('scaled_', j.split()[0]))
+                        nb = i + '  ' + j + '   1   0   0\n'
+                        scaled_nb = scaled_i + '  ' + scaled_j + '   1   0   0\n'
+                        outtext.append(nb)
+                        outtext.append(scaled_nb)
+
                 outtext.append('\n\n')
 
 
-            # Modify protein system to include VS
-            elif 'atoms' in key and section == 3:
-                outtext.append(key)
-                outtext.append(value)
-                prev = value[-2].split()
-                vs1 = int(prev[0]) + 1
-                vs2 = int(prev[0]) + 2
-                outtext.append(' %i  VS  %i  VIR   VS1   %i  0.000 0.000 \n %i  VS  %i  VIR   VS2   %i  0.000 0.000 \n' \
-                               % (vs1, int(prev[2]) + 1, vs1, vs2, int(prev[2]) + 2, vs2))
-
-            elif 'dihedral' in key and section == 7:
-                outtext.append(key)
-                outtext.append(value)
-                vs_coord, dist_as, P1s, P2s, lig_vs_dist, ligand_atoms, contres_PL, dist_contres = visi.create_virtual_site(
-                    complex_septop, complex_A, lig=ligand)
-                outtext.append('[ virtual_sites2 ]\n %i   %i %i 1 %.7f\n %i   %i %i 1 %.7f\n\n' \
-                               % (vs1, P1s[0], P2s[0], dist_as[0], vs2, P1s[1], P2s[1], dist_as[1]))
             # Modify the ligand system
             elif 'atoms' in key and ligand in value[2].split():
 
@@ -216,18 +307,14 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
                     # For ligand A create an A and a B state according to A_B_state_ligA
                     if ligand in v and int(v.split()[2]) == 1 and not v.startswith(';'):
                         atomindex_i.append(v.split()[0])
-                        line = create_A_and_B_state_ligand(v, A_B_state_ligA)
+                        line = create_A_and_B_state_ligand(v, A_B_state_ligA, lig = 1)
                         outtext.append(line)
                     # For ligand B create an A and a B state according to A_B_state_ligB
                     if ligand in v and int(v.split()[2]) == 2 and not v.startswith(';'):
                         atomindex_j.append(v.split()[0])
-                        line = create_A_and_B_state_ligand(v, A_B_state_ligB)
+                        line = create_A_and_B_state_ligand(v, A_B_state_ligB, lig = 2)
                         outtext.append(line)
-                outtext.append('\n\n[exclusions]\n\n')
-                # add exclusions between all atoms of ligand A and ligand B
-                for i in atomindex_i:
-                    line = '  '.join([i] + atomindex_j)
-                    outtext.append('%s\n' % line)
+
                 outtext.append('\n\n')
             else:
                 outtext.append(key)
@@ -239,23 +326,6 @@ def create_top(in_top, out_top, A_B_state_ligA, A_B_state_ligB, complex_septop, 
         for line in sec:
             file.write(line)
 
-    file.write('\n[ intermolecular_interactions ]\n[ bonds ]\n; ai    aj    type   bA    kA    bB    kB\n')
-    fc_A = 8368.0
-    fc_B = 8368.0
-    if A_B_state_ligA == 'dummy':
-        fc_B = 0.0
-    if A_B_state_ligB == 'dummy':
-        fc_A = 0.0
-
-    file.write('%i   %i   6   %.3f    %.1f   %.3f   %.1f\n' % (
-    vs1, ligand_atoms[0] + 2, lig_vs_dist[0], fc_A, lig_vs_dist[0], fc_B))
-    file.write('%i   %i   6   %.3f    %.1f   %.3f   %.1f\n' % (
-    vs2, ligand_atoms[1] + 2, lig_vs_dist[1], fc_A, lig_vs_dist[1], fc_B))
-    file.write('%i   %i   6   %.3f    %.1f   %.3f   %.1f\n' % (
-    contres_PL[0][0], contres_PL[0][1] + 2, dist_contres[0], fc_A, dist_contres[0], fc_B))
-    file.write('%i   %i   6   %.3f    %.1f   %.3f   %.1f\n' % (
-    contres_PL[1][0], contres_PL[1][1] + 2, dist_contres[1], fc_A, dist_contres[1], fc_B))
-
     file.close()
 
-    return out_top, vs_coord
+    return out_top
