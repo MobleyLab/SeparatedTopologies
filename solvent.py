@@ -1,6 +1,8 @@
 import parmed as pmd
 from SeparatedTopologies import ligand_files as lf
-from SeparatedTopologies import rot_bonds as rb
+from SeparatedTopologies import rot_bonds as rotbond
+import mdtraj as md
+import numpy as np
 
 def make_section(text):
     # Create dictionary of different section of the topology file
@@ -205,8 +207,30 @@ def write_itp_restraints(dih, values, forceconst_A, forceconst_B, file):
 
     return
 
-def restrain_rot_bonds(ligand, pdb,lig,folder):
-    dih_A, values_A, len_ligA = rb.get_dihedrals(ligand,pdb,lig)
+def get_dihedrals(ligand,solvent,complex, lig):
+    '''Get dihedral around rotatable bond'''
+    traj = md.load(complex)
+    topology = traj.topology
+    ligand_top = topology.select('resname %s' % lig).tolist()
+    len_lig = len(ligand_top)
+    print(len_lig)
+    rot_bonds = rotbond.rota_bonds(ligand)
+    traj_solvent = md.load(solvent)
+    topology_solvent = traj_solvent.topology
+    ligand_top_solvent = topology_solvent.select('resname UNL').tolist()
+    print(len(ligand_top_solvent))
+    dih = []
+    values = []
+    for rb in rot_bonds:
+        rb_solvent = [ligand_top_solvent[r] for r in rb]
+        rb = [ligand_top[r] for r in rb]
+        dih1 = np.rad2deg(md.compute_dihedrals(traj, [np.array(rb)]))
+        dih.append([r + 1 for r in rb_solvent])
+        values.append(round(float(dih1[0]), 2))
+    return dih, values, len_lig
+
+def restrain_rot_bonds(ligand, solvent,pdb,lig,folder):
+    dih_A, values_A, len_ligA = get_dihedrals(ligand,solvent,pdb,lig)
     write_itp_restraints(dih_A, values_A, 0, 5, '%s/rot_bonds_on.itp' % folder)
 
     return

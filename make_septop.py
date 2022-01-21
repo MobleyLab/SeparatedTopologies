@@ -259,11 +259,11 @@ def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A,
                         continue
                     else:
                         outtext.append(v)
-                for atomtype in [atomtype_i, atomtype_j]:
+                for inx,atomtype in enumerate([atomtype_i, atomtype_j]):
                     for l in atomtype:
-                        if atomtype == atomtype_i:
+                        if inx == 0:
                             new_at = "".join(('LIG1_', l))
-                        elif atomtype == atomtype_j:
+                        elif inx == 1:
                             new_at = "".join(('LIG2_', l))
                         at_line = new_at.split()
                         #Scale the epsilon of the vdw terms by a constant gamma

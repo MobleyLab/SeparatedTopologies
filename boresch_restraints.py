@@ -457,9 +457,9 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
             if collinear == True or check_a1 == False or check_a2 == False or max(distances) > max_distance\
                     or var_d1>300 or var_d2>300 or var_d3>300 or var_a1>100 or var_a2>100\
                     or min(average_dih) < -150 or max(average_dih) > 150:
-                # print(collinear, check_a1, check_a2)
-                # print(average_dih)
-                # print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
+                #print(collinear, check_a1, check_a2)
+                #print(average_dih)
+                #print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
                 print('Manual selection not appropriate. Continuing with automatic selection for protein atoms')
                 protein_atoms = None
             # Check if user specified protein atoms are among 'stable ones'
@@ -755,8 +755,9 @@ def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB,
 
     ###Compute distance, angles, dihedrals
     values_A, restrained_atoms_A = compute_dist_angle_dih(complex_A, restrained_atoms_A)
+    print([round(r,2) for r in values_A])
     values_B, restrained_atoms_B = compute_dist_angle_dih(complex_B, restrained_atoms_B)
-
+    print([round(r,2) for r in values_B])
     #Edit protein indices if the ligand comes before the protein in the file
     # if index protein atom > index ligand atom
     if restrained_atoms_A[0] > restrained_atoms_A[3]:
