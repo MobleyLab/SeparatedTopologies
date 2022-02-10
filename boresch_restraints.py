@@ -247,7 +247,7 @@ def protein_list(traj, l1, residues2exclude=None):
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
         # Discard atoms with RMSF > 0.1
         indices = [heavy_protein_full.index(h) for h in heavy_protein]
-        heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.05]
+        heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.1]
     #if a list of residue indices is provided: exclude those residues
     else:
         ex = []
