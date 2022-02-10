@@ -11,8 +11,9 @@ from openeye import oechem
 import math
 from scipy import stats
 from openforcefield.topology import Molecule
+#from openff.toolkit.topology import Molecule
 import networkx as nx
-
+import matplotlib.pyplot as plt
 force_const = 83.68
 R = 8.31445985*0.001  # Gas constant in kJ/mol/K
 T = 298.15
@@ -42,6 +43,10 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
     #Store length of the ligand
     lig_length = len(ligand)
     ligand_traj = traj.atom_slice(ligand, inplace=False)
+    #Load in ligand from mol2 into openeye
+    ifs = oechem.oemolistream(lig)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
 
     #Use openff to make graph from molecule
     molecule = Molecule(lig)
@@ -181,11 +186,9 @@ def protein_list(traj, l1, residues2exclude=None):
         heavy_protein_full = topology.select('protein and (backbone or name CB)')
         heavy_protein_traj = traj.atom_slice(heavy_protein_full, inplace=False)
         heavy_protein_full = heavy_protein_full.tolist()
-
         #Compute RMSF protein atoms
         heavy_protein_traj.superpose(heavy_protein_traj)
         rmsf = list(md.rmsf(heavy_protein_traj, heavy_protein_traj, 0))
-
         #Compute secondary structure of residues, output numpy array
         dssp = md.compute_dssp(heavy_protein_traj, simplified=True)
         structure = dssp[0].tolist()
@@ -264,7 +267,6 @@ def protein_list(traj, l1, residues2exclude=None):
     indices_of_in_range_pairs = np.where(np.logical_and(distances > min_distance, distances <= max_distance))[0]
 
     protein_list = [heavy_protein[i] for i in indices_of_in_range_pairs]
-
     return protein_list
 
 #copied from yank version 0.25.2
@@ -408,7 +410,6 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
         l1, l2, l3, lig_length = select_ligand_atoms(mol2_lig, traj, ligand=ligand)
     #Protein atoms: should be backbone/CB, part of a helix/beta sheet
     proteinlist = protein_list(traj, l1)
-
     #If protein atoms are specified by the user: Check that those are appropriate
     if protein_atoms != None:
         if len(protein_atoms) == 3:
@@ -464,7 +465,7 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
                 protein_atoms = None
             # Check if user specified protein atoms are among 'stable ones'
             # If not, still use them but let user know that these might not be stable
-            elif protein_atoms[0] not in proteinlist and protein_atoms[1] not in proteinlist and protein_atoms[2] not in proteinlist:
+            elif protein_atoms[0] not in proteinlist or protein_atoms[1] not in proteinlist or protein_atoms[2] not in proteinlist:
                 print('These protein atoms might not be a good selection. Check them (backbone?part of helix?).')
 
     # If no protein atoms are defined: Get protein atoms through automatic selection
@@ -765,7 +766,8 @@ def restrain_ligands(complex_A, complex_B, mol2_ligA, mol2_ligB,
         restrained_atoms_B = edit_indices_protein(restrained_atoms_B, ligA_length)
     # For ligand B add length of ligand A since in combined .gro file
     restrained_atoms_B = edit_indices_ligandB(restrained_atoms_B, ligA_length)
-
+    print(restrained_atoms_A)
+    print(restrained_atoms_B)
     # Typically we restrain everything with 20 kcal/mol; here given in kJ/mol
     fc = 20 * 4.184
     # distance: Force constants in kJ/mol*nm2
