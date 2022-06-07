@@ -20,24 +20,25 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG'):
 
     # Grab ligand B from complex B
     lig2 = complex_B[ligand, :]
-
     #Find residue number ligand A
     for res_nr, res in enumerate(complex_A.residues):
         if res.name == ligand:
             ligand_res_nr = res_nr
-
     #Split complex into individial molecules ( [ moleculetype ] sections GROMACS)
     split_A = complex_A.split()
-
     #Find index of the [ moleculetype ] section of ligand A
+    count = 0
     for ind,i in enumerate(split_A):
+        count += len(i[1])
         if i[0].residues[0].name == ligand:
             lig1_pos = ind
-
+            break
     #Create new topology where ligand B is inserted directly after ligand A
     sep_top = complex_A[:ligand_res_nr+1, :] + lig2 + complex_A[ligand_res_nr+1:, :]
     # combine ligA and ligB into a single molecule entry based on index [ moleculetype ] secion ligand
-    sep_top.write(septop, [[lig1_pos, lig1_pos+1]])
+#    sep_top.write(septop, combine = [[lig1_pos, lig1_pos+1]])
+    sep_top.write(septop, combine = [[count-1, count]])
+#    sep_top.write(septop, combine = [[ligand_res_nr, ligand_res_nr+1]])
 
     return
 
@@ -185,14 +186,13 @@ def atom_types_ligand(in_top, ligand='LIG'):
     text = file.readlines()
     file.close()
     end_text = len(text)
-    # at = []
     atomtype = []
     for line in text:
 
         if ligand in line and not line.startswith(';') and line.split()[0].isdigit():
             at = line.split()[1]
             for l in text:
-                if l.startswith(';') or l.startswith('\n'):
+                if l.startswith(';') or len(l.split()) == 0:
                     continue
                 if l.split()[0] == at and l not in atomtype:
                     atomtype.append(l)
