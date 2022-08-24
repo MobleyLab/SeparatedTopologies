@@ -58,7 +58,6 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
     #Find longest paths in ligand (weights=-1), get middle atom of that
     #Longest: nested dictionary of all paths
     longest = nx.shortest_path(nxgraph, weight=-1)
-
     longest_paths = []
     longest_path_length = 0
     for i in longest.values():
@@ -181,7 +180,6 @@ def protein_list(traj, l1, residues2exclude=None):
         list of indices of possible protein atoms
                 """
     topology = traj.topology
-
     if residues2exclude==None:
         heavy_protein_full = topology.select('protein and (backbone or name CB)')
         heavy_protein_traj = traj.atom_slice(heavy_protein_full, inplace=False)
@@ -245,9 +243,11 @@ def protein_list(traj, l1, residues2exclude=None):
         ex = list(itertools.chain.from_iterable(ex))
         ex = ' '.join(ex)
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
+        print(len(heavy_protein))
         # Discard atoms with RMSF > 0.1
         indices = [heavy_protein_full.index(h) for h in heavy_protein]
         heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.1]
+        print(len(heavy_protein))
     #if a list of residue indices is provided: exclude those residues
     else:
         ex = []
@@ -368,7 +368,6 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
     """
 
     complex_coordinates = traj.xyz[:, :, :]
-
     #Get length of unit cell
     #CAVE: the input should be the solvated protein-ligand complex, otherwise the maxdistance is too small than needed
     unit_cell = traj.unitcell_lengths[-1]
@@ -458,9 +457,9 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
             if collinear == True or check_a1 == False or check_a2 == False or max(distances) > max_distance\
                     or var_d1>300 or var_d2>300 or var_d3>300 or var_a1>100 or var_a2>100\
                     or min(average_dih) < -150 or max(average_dih) > 150:
-                #print(collinear, check_a1, check_a2)
-                #print(average_dih)
-                #print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
+                print(collinear, check_a1, check_a2)
+                print(average_dih)
+                print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
                 print('Manual selection not appropriate. Continuing with automatic selection for protein atoms')
                 protein_atoms = None
             # Check if user specified protein atoms are among 'stable ones'
@@ -818,3 +817,27 @@ def analytical_Boresch_correction(r0, thA, thB, fc_r, fc_thA, fc_thB, fc_phiA, f
     #dG in kcal mol
     dG = dG / 4.184
     return dG
+
+def ligand_sdf(pdb, outfile):
+    ''' Function to get ligand sdf from complex pdb. Only use if no sdf of ligands available. '''
+
+    complex_A = oechem.OEGraphMol()
+    ifs = oechem.oemolistream()
+    ofs = oechem.oemolostream()
+    ofs.open(outfile)
+    ifs.SetFlavor(oechem.OEFormat_PDB,
+                  oechem.OEIFlavor_PDB_Default | oechem.OEIFlavor_PDB_DATA | oechem.OEIFlavor_PDB_ALTLOC)
+    ifs.open(pdb)
+    oechem.OEReadMolecule(ifs, complex_A)
+    ifs.close()
+
+    lig = oechem.OEGraphMol()
+    prot = oechem.OEGraphMol()
+    wat = oechem.OEGraphMol()
+    other = oechem.OEGraphMol()
+    #get ligand
+    oechem.OESplitMolComplex(lig, prot, wat, other, complex_A)
+
+    oechem.OEWriteMolecule(ofs, lig)
+
+    return
