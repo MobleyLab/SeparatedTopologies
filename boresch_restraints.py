@@ -243,11 +243,14 @@ def protein_list(traj, l1, residues2exclude=None):
         ex = list(itertools.chain.from_iterable(ex))
         ex = ' '.join(ex)
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
-        print(len(heavy_protein))
         # Discard atoms with RMSF > 0.1
         indices = [heavy_protein_full.index(h) for h in heavy_protein]
         heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.1]
-        print(len(heavy_protein))
+        
+        #If no protein atoms found, raise exception
+        if len(heavy_protein) == 0:
+            raise ValueError('No protein atoms found. Check input files, e.g. check if periodic boundary conditions were removed from trajectory')  
+
     #if a list of residue indices is provided: exclude those residues
     else:
         ex = []
@@ -457,10 +460,10 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
             if collinear == True or check_a1 == False or check_a2 == False or max(distances) > max_distance\
                     or var_d1>300 or var_d2>300 or var_d3>300 or var_a1>100 or var_a2>100\
                     or min(average_dih) < -150 or max(average_dih) > 150:
-                print(collinear, check_a1, check_a2)
-                print(average_dih)
-                print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
-                print('Manual selection not appropriate. Continuing with automatic selection for protein atoms')
+            #    print(collinear, check_a1, check_a2)
+            #    print(average_dih)
+            #    print('variance angles, dihedrals', var_a1, var_a2, var_d1, var_d2, var_d3)
+                print('Ignoring manual selection of protein atoms. Continuing with automatic selection')
                 protein_atoms = None
             # Check if user specified protein atoms are among 'stable ones'
             # If not, still use them but let user know that these might not be stable
