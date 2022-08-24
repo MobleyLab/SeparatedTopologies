@@ -243,11 +243,14 @@ def protein_list(traj, l1, residues2exclude=None):
         ex = list(itertools.chain.from_iterable(ex))
         ex = ' '.join(ex)
         heavy_protein = topology.select('protein and (backbone or name CB) and (%s)' % ex).tolist()
-        print(len(heavy_protein))
         # Discard atoms with RMSF > 0.1
         indices = [heavy_protein_full.index(h) for h in heavy_protein]
         heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.1]
-        print(len(heavy_protein))
+        
+        #If no protein atoms found, raise exception
+        if len(heavy_protein) == 0:
+            raise ValueError('No protein atoms found. Check input files, e.g. check if periodic boundary conditions were removed from trajectory')  
+
     #if a list of residue indices is provided: exclude those residues
     else:
         ex = []
