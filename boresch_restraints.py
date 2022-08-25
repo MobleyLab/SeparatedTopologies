@@ -10,8 +10,8 @@ from scipy.spatial import distance
 from openeye import oechem
 import math
 from scipy import stats
-from openforcefield.topology import Molecule
-#from openff.toolkit.topology import Molecule
+#from openforcefield.topology import Molecule
+from openff.toolkit.topology import Molecule
 import networkx as nx
 import matplotlib.pyplot as plt
 force_const = 83.68
@@ -468,7 +468,7 @@ def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = No
             # Check if user specified protein atoms are among 'stable ones'
             # If not, still use them but let user know that these might not be stable
             elif protein_atoms[0] not in proteinlist or protein_atoms[1] not in proteinlist or protein_atoms[2] not in proteinlist:
-                print('These protein atoms might not be a good selection. Check them (backbone?part of helix?).')
+                print('These protein atoms might not be a good selection. Still continuing with the selection since they passed basic tests.')
 
     # If no protein atoms are defined: Get protein atoms through automatic selection
     if protein_atoms == None:
