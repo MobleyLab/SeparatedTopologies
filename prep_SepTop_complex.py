@@ -10,15 +10,19 @@ import parmed as pmd
 
 #path to data folder
 path = ''
+
 #ligand folders: name of this folder is considered the ligand name
 ligand_A = ''
 ligand_B = ''
+
 #directories of ligand input files
 compound_A = '%s/%s'%(path, ligand_A)
 compound_B = '%s/%s'%(path, ligand_B)
+
 #name of mol2 files ligand
 mol2_A = '%s/ligand.mol2'%compound_A
 mol2_B = '%s/ligand.mol2'%compound_B
+
 #name of complex files
 pdb_A = '%s/complex.pdb'%(compound_A)
 pdb_B = '%s/complex.pdb'%(compound_B)

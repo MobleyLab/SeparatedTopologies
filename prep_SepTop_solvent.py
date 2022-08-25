@@ -16,11 +16,11 @@ path = ''
 ligand_A = ''
 ligand_B = ''
 
-#directories
+#directories of ligand input files
 compound_A = '%s/%s'%(path, ligand_A)
 compound_B = '%s/%s'%(path, ligand_B)
 
-#name of solvent files
+#name of solvent .gro and .top files
 gro_A = '%s/solvent.gro'%compound_A
 gro_B = '%s/solvent.gro'%compound_B
 top_A = '%s/solvent.top'%compound_A
@@ -29,7 +29,7 @@ top_B = '%s/solvent.top'%compound_B
 #scaling factor gamma
 gamma = 0.3
 
-#Create new folder for this edge
+#Create new folder for each edge
 edge_A_B = '%s/edge_%s_%s'%(path, ligand_A, ligand_B)
 if not os.path.isdir(edge_A_B):os.mkdir(edge_A_B)
 
@@ -39,6 +39,7 @@ lig = 'UNL'
 ##########################
 ### Combine .gro files ###
 ##########################
+
 solv_gro = '%s/solvent.gro'%edge_A_B
 solv_gro = ac.combine_ligands_gro(gro_A, gro_B, complex, ligand_A=lig, ligand_B=lig)
 solv_gro = ac.edit_indices(solv_gro,solv_gro)
@@ -47,18 +48,15 @@ solv_gro = ac.edit_indices(solv_gro,solv_gro)
 ### Make separated topology ###
 ###############################
 
-#Add ligand B to .top of complex_A
-
+#Specify output file names
 top = '%s/solvent.top'%edge_A_B
-print('Combine top')
-ms.combine_ligands_top(top_A, top_B, top, ligand=lig)
-
-#Load top file
-
 step_1 = '%s/step1.top'%edge_A_B
 step_1_eq = '%s/step1_eq.top'%edge_A_B
 step_2 = '%s/step2.top'%edge_A_B
 step_2_eq = '%s/step2_eq.top'%edge_A_B
+
+#Combine topology ligand B and topology A
+ms.combine_ligands_top(top_A, top_B, top, ligand=lig)
 
 # Generate separated topology files different legs cycle
 #Four different end states:
