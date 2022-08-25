@@ -14,6 +14,7 @@ The package currently requires an OpenEye license for oechem and oespruce.
 ## Usage
 Example python script for setting up topology and coordinate files
  - for SepTop in the complex phase: `prep_SepTop_complex.py`
- - for SepTop in the solvent pahse: `prep_SepTop_solvent.py`
+ - for SepTop in the solvent phase: `prep_SepTop_solvent.py`
  - for absolute hydration free energy calculations: `prep_solvent_absolute.py`
+
 Example MDP files can be found in the folder `MDP_files`
