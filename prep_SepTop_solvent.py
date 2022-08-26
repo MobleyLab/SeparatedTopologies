@@ -41,7 +41,7 @@ lig = 'UNL'
 ##########################
 
 solv_gro = '%s/solvent.gro'%edge_A_B
-solv_gro = ac.combine_ligands_gro(gro_A, gro_B, complex, ligand_A=lig, ligand_B=lig)
+solv_gro = ac.combine_ligands_gro(gro_A, gro_B, solv_gro, ligand_A=lig, ligand_B=lig)
 solv_gro = ac.edit_indices(solv_gro,solv_gro)
 
 ###############################
