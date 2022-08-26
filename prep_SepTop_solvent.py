@@ -1,4 +1,4 @@
-from SeparatedTopologies import make_septop as ms
+from SeparatedTopologies import make_septop as msG
 from SeparatedTopologies import boresch_restraints as br
 from SeparatedTopologies import combine_coordinates as ac
 from SeparatedTopologies import distance_solvent as ds
@@ -83,6 +83,8 @@ gro.save(solv_gro, overwrite=True)
 #equilibrate first with low force constant to avoid instabilities
 fc_eq = 1.0
 fc_prod = 1000.0
+
+#restrain atoms closest to the COM of the two ligands using a single harmonic distance restraint
 atoms_restrain,dist = ds.distance_restraint(solv_gro,lig)
 ds.write_itp_restraints(atoms_restrain, dist, fc_eq,fc_eq, '%s/dist_restraint_eq.itp'%edge_A_B)
 ds.write_itp_restraints(atoms_restrain, dist, fc_prod,fc_prod, '%s/dist_restraint.itp'%edge_A_B)
