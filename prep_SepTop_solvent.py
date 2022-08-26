@@ -1,4 +1,4 @@
-from SeparatedTopologies import make_septop as msG
+from SeparatedTopologies import make_septop as ms
 from SeparatedTopologies import boresch_restraints as br
 from SeparatedTopologies import combine_coordinates as ac
 from SeparatedTopologies import distance_solvent as ds
@@ -90,7 +90,7 @@ ds.write_itp_restraints(atoms_restrain, dist, fc_eq,fc_eq, '%s/dist_restraint_eq
 ds.write_itp_restraints(atoms_restrain, dist, fc_prod,fc_prod, '%s/dist_restraint.itp'%edge_A_B)
 
 #Include .itp files in the topology files
-rb.include_itp_in_top(step_1, 'dist_restraint.itp')
-rb.include_itp_in_top(step_1_eq, 'dist_restraint_eq.itp')
-rb.include_itp_in_top(step_2, 'dist_restraint.itp')
-rb.include_itp_in_top(step_2_eq, 'dist_restraint_eq.itp')
+br.include_itp_in_top(step_1, 'dist_restraint.itp')
+br.include_itp_in_top(step_1_eq, 'dist_restraint_eq.itp')
+br.include_itp_in_top(step_2, 'dist_restraint.itp')
+br.include_itp_in_top(step_2_eq, 'dist_restraint_eq.itp')
