@@ -1,6 +1,7 @@
 # SeparatedTopologies
 Exploratory work on free energy calculations with GROMACS using "separated topologies" approach (Rocklin et al., 2013).
 
+
 ## Installation
 ```bash
 # Create conda environment using environment.yml file
