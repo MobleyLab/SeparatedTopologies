@@ -42,27 +42,45 @@ def combine_ligands_top(top_A, top_B, septop, ligand='LIG'):
 
     return
 
-def make_section_dictionary(text):
+def make_section_dictionaries(text):
     # Create dictionary of different section of the topology file
+
+    diclist = []
 
     dic = {}
     start_section = False
 
-    for index, line in enumerate(text):
+    index=0
+    while index < len(text):
+        line = text[index]
+
         # '[ ' marks the start of a section
         if '[ ' in line:
-            if not start_section and index == 0:
+            if not start_section: #and index == 0:
                 start_section = True
                 key = line
                 dic[key] = []
+                index+=1
+
+            # reset for next section dictionary
             else:
                 # break if already next section
-                break
+                diclist.append(dic)
+                dic = {}
+                start_section=False
+
         elif start_section:
             # append all the lines that belong to that section
             dic[key].append(line)
+            index+=1
 
-    return dic
+        else:
+            index+=1
+
+    # append the last section to the diclist
+    diclist.append(dic)
+
+    return diclist
 
 
 def create_A_and_B_state_ligand(line, A_B_state='vdwq_q', lig = 1):
@@ -239,9 +257,18 @@ def create_top(in_top, out_top, gamma, A_B_state_ligA, A_B_state_ligB, in_top_A,
     count = 0
     outtext = []
     section = 0
-    while count < end_text:
-        # Create dictionary of different sections
-        dic = make_section_dictionary(text[count:])
+
+
+    # print text does print out the proper file
+    #print(text)
+
+    diclist = make_section_dictionaries(text)
+
+    for dic in diclist:
+    # Create dictionary of different sections
+        #dic = make_section_dictionary(text[count:])
+
+        #print(dic)
 
         count += 1
 
