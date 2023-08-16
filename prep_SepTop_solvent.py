@@ -1,7 +1,7 @@
-from SeparatedTopologies import make_septop as ms
-from SeparatedTopologies import boresch_restraints as br
-from SeparatedTopologies import combine_coordinates as ac
-from SeparatedTopologies import distance_solvent as ds
+import make_septop as ms
+import boresch_restraints as br
+import combine_coordinates as ac
+import distance_solvent as ds
 import os
 import parmed as pmd
 

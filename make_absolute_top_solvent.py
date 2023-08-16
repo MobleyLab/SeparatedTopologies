@@ -1,6 +1,6 @@
 import parmed as pmd
-from SeparatedTopologies import ligand_files as lf
-from SeparatedTopologies import rot_bonds as rotbond
+import ligand_files as lf
+import rot_bonds as rotbond
 import mdtraj as md
 import numpy as np
 
