@@ -21,19 +21,6 @@ RT = R*T
 
 
 def determine_rings_oechem(lig: str):
-    """Assign atoms into different ring systems
-
-    Parameters
-    ----------
-    lig : str
-      path to the mol2 file
-
-
-    Returns
-    -------
-    atoms
-       for each ring system system, the indices of atoms within
-    """
     from openeye import oechem
 
     # Load in ligand from mol2 into openeye
@@ -56,6 +43,26 @@ def determine_rings_oechem(lig: str):
             atoms.append(single_ring)
 
     return atoms
+
+
+def determine_rings(lig: str, use_oechem=True):
+    """Assign atoms into different ring systems
+
+    Parameters
+    ----------
+    lig : str
+      path to the mol2 file
+
+
+    Returns
+    -------
+    atoms
+       for each ring system system, the indices of atoms within
+    """
+    if use_oechem:
+        return determine_rings_oechem(lig)
+    else:
+        raise NotImplementedError()
 
 
 def select_ligand_atoms(lig, traj, ligand='LIG'):
