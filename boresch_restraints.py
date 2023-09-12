@@ -44,6 +44,10 @@ def determine_rings_oechem(lig: str):
     return atoms
 
 
+def determine_rings_rdkit(lig: str):
+    raise NotImplementedError()
+
+
 def determine_rings(lig: str, use_oechem=True):
     """Assign atoms into different ring systems
 
@@ -61,7 +65,7 @@ def determine_rings(lig: str, use_oechem=True):
     if use_oechem:
         return determine_rings_oechem(lig)
     else:
-        raise NotImplementedError()
+        return determine_rings_rdkit(lig)
 
 
 def select_ligand_atoms(lig, traj, ligand='LIG'):
@@ -357,6 +361,10 @@ def substructure_search_oechem(mol2_lig, smarts):
     return matches
 
 
+def substructure_search_rdkit(mol2_lig, smarts):
+    raise NotImplementedError()
+
+
 def substructure_search(mol2_lig, smarts, use_oechem=True):
     """Pick ligand atoms for restraints based on substructure search.
 
@@ -375,7 +383,7 @@ def substructure_search(mol2_lig, smarts, use_oechem=True):
     if use_oechem:
         return substructure_search_oechem(mol2_lig, smarts)
     else:
-        raise NotImplementedError()
+        return substructure_search_rdkit(mol2_lig, smarts)
 
 
 def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = None, substructure = None, ligand='LIG'):
@@ -882,6 +890,10 @@ def ligand_sdf_oechem(pdb, outfile):
     return
 
 
+def ligand_sdf_rdkit(pdb, outfile):
+    raise NotImplementedError()
+
+
 def ligand_sdf(pdb, outfile, use_oechem=True):
     """Get ligand sdf from complex pdb.
 
@@ -889,4 +901,4 @@ def ligand_sdf(pdb, outfile, use_oechem=True):
     if use_oechem:
         return ligand_sdf_oechem(pdb, outfile)
     else:
-        raise NotImplementedError()
+        return ligand_sdf_rdkit(pdb, outfile)
