@@ -7,7 +7,6 @@ import mdtraj as md
 import itertools
 from simtk import unit
 from scipy.spatial import distance
-from openeye import oechem
 import math
 from scipy import stats
 #from openforcefield.topology import Molecule
@@ -335,6 +334,8 @@ def check_angle(angle):
     return True
 
 def substructure_search_oechem(mol2_lig, smarts):
+    from openeye import oechem
+
     ifs = oechem.oemolistream(mol2_lig)
 
     mol = oechem.OEGraphMol()
@@ -857,6 +858,7 @@ def analytical_Boresch_correction(r0, thA, thB, fc_r, fc_thA, fc_thB, fc_phiA, f
 
 def ligand_sdf(pdb, outfile):
     ''' Function to get ligand sdf from complex pdb. Only use if no sdf of ligands available. '''
+    from openeye import oechem
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
