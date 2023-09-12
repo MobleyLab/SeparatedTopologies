@@ -1,19 +1,11 @@
-from openeye import oechem, oespruce
 import parmed as pmd
 import shutil
 import mdtraj as md
 
-def align_complexes(pdb_A, pdb_B, out_B):
-    """Align 2 structures with oespruce, Structure A is the reference
-    Parameters
-    ----------
-    pdb_A : str
-       pdb structure Complex A
-    pdb_B : str
-        pdb structure Complex B
-    out_B : str
-        pdb structure, Aligned structure of complex B
-    """
+
+def align_complexes_oechem(pdb_A, pdb_B, out_B):
+    from openeye import oechem, oespruce
+
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
     ifs.SetFlavor(oechem.OEFormat_PDB,
@@ -44,6 +36,28 @@ def align_complexes(pdb_A, pdb_B, out_B):
     oechem.OEWriteMolecule(ofs, complex_B)
     ofs.close()
     return
+
+
+def align_complexes_rdkit(pdb_A, pdb_B, out_B):
+    raise NotImplementedError()
+
+
+def align_complexes(pdb_A, pdb_B, out_B, use_oechem=True):
+    """Align 2 structures with oespruce, Structure A is the reference
+    Parameters
+    ----------
+    pdb_A : str
+       pdb structure Complex A
+    pdb_B : str
+        pdb structure Complex B
+    out_B : str
+        pdb structure, Aligned structure of complex B
+    """
+    if use_oechem:
+        return align_complexes_oechem(pdb_A, pdb_B, out_B)
+    else:
+        return align_complexes_rdkit(pdb_A, pdb_B, out_B)
+
 
 def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B='MOL'):
     """Add ligand B coordinates to coordinate (.gro) file of ligand A in complex with protein
