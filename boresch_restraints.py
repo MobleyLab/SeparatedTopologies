@@ -19,6 +19,45 @@ R = 8.31445985*0.001  # Gas constant in kJ/mol/K
 T = 298.15
 RT = R*T
 
+
+def determine_rings_oechem(lig: str):
+    """Assign atoms into different ring systems
+
+    Parameters
+    ----------
+    lig : str
+      path to the mol2 file
+
+
+    Returns
+    -------
+    atoms
+       for each ring system system, the indices of atoms within
+    """
+    from openeye import oechem
+
+    # Load in ligand from mol2 into openeye
+    ifs = oechem.oemolistream(lig)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
+
+    # Find ring systems (here not specifically aromatic, could change that)
+    nr_ring_systems, parts = oechem.OEDetermineRingSystems(mol)
+    atoms = []
+
+    if nr_ring_systems:
+        # Loop through ringsystems, count number of atoms
+        for ringidx in range(1, nr_ring_systems + 1):
+            single_ring = []
+            # store atom indices of ring systems
+            for atom in mol.GetAtoms():
+                if parts[atom.GetIdx()] == ringidx:
+                    single_ring.append(atom.GetIdx())
+            atoms.append(single_ring)
+
+    return atoms
+
+
 def select_ligand_atoms(lig, traj, ligand='LIG'):
     """Select three ligand atoms for Boresch-style restraints.
     Parameters
@@ -43,10 +82,6 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
     #Store length of the ligand
     lig_length = len(ligand)
     ligand_traj = traj.atom_slice(ligand, inplace=False)
-    #Load in ligand from mol2 into openeye
-    ifs = oechem.oemolistream(lig)
-    mol = oechem.OEGraphMol()
-    oechem.OEReadMolecule(ifs, mol)
 
     #Use openff to make graph from molecule
     molecule = Molecule(lig)
@@ -70,28 +105,12 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
                 longest_paths.append(value)
     #there might be multiple longest path, just choose first one for now
     center = longest_paths[0][int(len(longest_paths[0])/2)]
-    #Load in ligand from mol2 into openeye
-    ifs = oechem.oemolistream(lig)
-    mol = oechem.OEGraphMol()
-    oechem.OEReadMolecule(ifs, mol)
 
-    # Find ring systems (here not specifically aromatic, could change that)
-    nr_ring_systems, parts = oechem.OEDetermineRingSystems(mol)
-    ring_systems = []
-    atoms = []
+    atoms = determine_rings_oechem(lig)
+    nr_ring_systems = len(atoms)
+
     # If we find a ring system in our molecule
     if nr_ring_systems >= 1:
-        #Loop through ringsystems, count number of atoms
-        for ringidx in range(1, nr_ring_systems + 1):
-            single_ring = []
-            nr_atoms = parts.count(ringidx)
-            ring_systems.append(nr_atoms)
-            #store atom indices of ring systems
-            for atom in mol.GetAtoms():
-                if parts[atom.GetIdx()] == ringidx:
-                    single_ring.append(atom.GetIdx())
-            atoms.append(single_ring)
-
         # Compute RMSF ligand atoms
         ligand_traj.superpose(ligand_traj)
         rmsf = list(md.rmsf(ligand_traj, ligand_traj, 0))
@@ -99,8 +118,7 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
         ring_atoms = []
         # also save ring atoms ring by ring in nested list to be able to select atoms from a single ring later
         ring_atoms_2 = []
-        for inx,r in enumerate(ring_systems):
-            atoms_ring = atoms[inx]
+        for atoms_ring in enumerate(atoms):
             rmsf_ring = [rmsf[a] for a in atoms_ring]
             #Only choose ring systems that are stable (RMSF<0.1)
             if max(rmsf_ring) < 0.1:
