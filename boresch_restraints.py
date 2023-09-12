@@ -856,8 +856,8 @@ def analytical_Boresch_correction(r0, thA, thB, fc_r, fc_thA, fc_thB, fc_phiA, f
     dG = dG / 4.184
     return dG
 
-def ligand_sdf(pdb, outfile):
-    ''' Function to get ligand sdf from complex pdb. Only use if no sdf of ligands available. '''
+
+def ligand_sdf_oechem(pdb, outfile):
     from openeye import oechem
 
     complex_A = oechem.OEGraphMol()
@@ -880,3 +880,13 @@ def ligand_sdf(pdb, outfile):
     oechem.OEWriteMolecule(ofs, lig)
 
     return
+
+
+def ligand_sdf(pdb, outfile, use_oechem=True):
+    """Get ligand sdf from complex pdb.
+
+     Only use if no sdf of ligands available."""
+    if use_oechem:
+        return ligand_sdf_oechem(pdb, outfile)
+    else:
+        raise NotImplementedError()
