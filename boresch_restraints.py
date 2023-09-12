@@ -327,19 +327,7 @@ def check_angle(angle):
         return False
     return True
 
-def substructure_search(mol2_lig, smarts):
-    """Pick ligand atoms for restraints based on substructure search.
-        Parameters
-        ----------
-        mol2_lig : str
-           mol2 file of the ligand.
-        smarts : str
-            Smarts pattern used for substructure search. One atom is flagged and picked for restraints.
-        Returns
-        -------
-        matches: list
-            Indices of ligand atoms that match the picked atom in the substructure.
-        """
+def substructure_search_oechem(mol2_lig, smarts):
     ifs = oechem.oemolistream(mol2_lig)
 
     mol = oechem.OEGraphMol()
@@ -359,6 +347,27 @@ def substructure_search(mol2_lig, smarts):
                 matches.append(matched_atom.target.GetIdx())
 
     return matches
+
+
+def substructure_search(mol2_lig, smarts, use_oechem=True):
+    """Pick ligand atoms for restraints based on substructure search.
+
+    Parameters
+    ----------
+    mol2_lig : str
+       mol2 file of the ligand.
+    smarts : str
+        Smarts pattern used for substructure search. One atom is flagged and picked for restraints.
+
+    Returns
+    -------
+    matches: list
+        Indices of ligand atoms that match the picked atom in the substructure.
+    """
+    if use_oechem:
+        return substructure_search_oechem(mol2_lig, smarts)
+    else:
+        raise NotImplementedError()
 
 
 def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = None, substructure = None, ligand='LIG'):
