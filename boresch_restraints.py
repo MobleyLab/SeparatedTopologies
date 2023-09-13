@@ -891,7 +891,34 @@ def ligand_sdf_oechem(pdb, outfile):
 
 
 def ligand_sdf_rdkit(pdb, outfile):
-    raise NotImplementedError()
+    from rdkit import Chem
+
+    # these resnames get skipped, i.e. aren't considered the ligand
+    water = {'SOL', 'HOH', 'WAT'}
+    AAs = {'GLY', 'ALA', 'VAL', 'LEU', 'ILE',
+           'MET', 'PHE', 'TYR', 'TRP', 'ARG',
+           'CYS', 'ASN', 'GLN', 'THR', 'SER',
+           'PRO', 'HIS', 'LYS', 'ASP', 'GLU',
+           'CYX', 'HID', 'HIP', 'HIE'}
+
+    m = Chem.MolFromPDBFile(pdb, removeHs=False)
+
+    lig = None
+    mols = Chem.GetMolFrags(m, asMols=True, sanitizeFrags=False)
+
+    for mol in mols:
+        resname = mol.GetAtomWithIdx(0).GetMonomerInfo().GetResidueName().upper()
+        if resname in water:
+            continue
+        if resname in AAs:
+            continue
+
+        if lig is None:
+            lig = mol
+        else:
+            lig = Chem.CombineMols(lig, mol)
+
+    Chem.MolToMolFile(lig, outfile)
 
 
 def ligand_sdf(pdb, outfile, use_oechem=True):
