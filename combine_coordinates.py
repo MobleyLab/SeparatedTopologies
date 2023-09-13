@@ -38,8 +38,16 @@ def align_complexes_oechem(pdb_A, pdb_B, out_B):
     return
 
 
-def align_complexes_rdkit(pdb_A, pdb_B, out_B):
-    raise NotImplementedError()
+def align_complexes_mdtraj(pdb_A, pdb_B, out_B):
+    ref_traj = md.Trajectory(pdb_A)
+    traj = md.Trajectory(pdb_B)
+
+    traj.superpose(ref_traj, atom_indices=ref_traj.topology.select('backbone'))
+
+    with md.formats.PDBTrajectoryFile(out_B, mode='w') as w:
+        w.write(traj.xyz[0], traj.topology,
+                unitcell_lengths=traj.unitcell_lengths[0],
+                unitcell_angles=traj.unitcell_angles[0])
 
 
 def align_complexes(pdb_A, pdb_B, out_B, use_oechem=True):
@@ -52,11 +60,14 @@ def align_complexes(pdb_A, pdb_B, out_B, use_oechem=True):
         pdb structure Complex B
     out_B : str
         pdb structure, Aligned structure of complex B
+    use_oechem : bool
+        if True, will use oechem spruce (requiring license) otherwise will use
+        mdtraj
     """
     if use_oechem:
         return align_complexes_oechem(pdb_A, pdb_B, out_B)
     else:
-        return align_complexes_rdkit(pdb_A, pdb_B, out_B)
+        return align_complexes_mdtraj(pdb_A, pdb_B, out_B)
 
 
 def combine_ligands_gro(in_file_A, in_file_B, out_file, ligand_A='MOL', ligand_B='MOL'):
