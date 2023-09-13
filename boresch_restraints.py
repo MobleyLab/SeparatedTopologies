@@ -362,7 +362,15 @@ def substructure_search_oechem(mol2_lig, smarts):
 
 
 def substructure_search_rdkit(mol2_lig, smarts):
-    raise NotImplementedError()
+    from rdkit import Chem
+
+    m = Chem.MolFromMol2File(mol2_lig, removeHs=False)
+
+    query = Chem.MolFromSmarts(smarts)
+
+    matches = m.GetSubstructMatches(query, uniquify=True)
+
+    raise matches
 
 
 def substructure_search(mol2_lig, smarts, use_oechem=True):
