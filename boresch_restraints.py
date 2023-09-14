@@ -148,7 +148,7 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
         ring_atoms = []
         # also save ring atoms ring by ring in nested list to be able to select atoms from a single ring later
         ring_atoms_2 = []
-        for atoms_ring in enumerate(atoms):
+        for atoms_ring in atoms:
             rmsf_ring = [rmsf[a] for a in atoms_ring]
             #Only choose ring systems that are stable (RMSF<0.1)
             if max(rmsf_ring) < 0.1:
