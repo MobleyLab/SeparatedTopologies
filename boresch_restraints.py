@@ -2,6 +2,7 @@
 #Ligand atoms: largest ring systems, atoms closest to ligand COM
 #protein atoms: middle of a helix, backbone/C-beta, >1nm away from ligand COM, check angles
 
+from functools import reduce
 import numpy as np
 import mdtraj as md
 import itertools
@@ -45,7 +46,26 @@ def determine_rings_oechem(lig: str):
 
 
 def determine_rings_rdkit(lig: str):
-    raise NotImplementedError()
+    from rdkit import Chem
+
+    m = Chem.MolFromMol2File(lig, removeHs=False)
+
+    ringinfo = m.GetRingInfo()
+
+    rings = ringinfo.AtomRings()
+    # unlike oechem, this is each ring, rather than ring systems, so let's merge
+    # 1) make a graph of all rings
+    g = nx.Graph()
+    g.add_nodes_from(frozenset(r) for r in rings)
+    for a, b in itertools.combinations(g.nodes, 2):
+        # 2) connect rings that have at least one atom in common
+        if a & b:
+            g.add_edge(a, b)
+    # 3) merge connected components to find fused ring systems
+    ringsystems = [list(reduce(lambda x, y: x | y, n))
+                   for n in nx.connected_components(g)]
+
+    return ringsystems
 
 
 def determine_rings(lig: str, use_oechem=True):
