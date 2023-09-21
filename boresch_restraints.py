@@ -195,13 +195,15 @@ def protein_list(traj, l1, residues2exclude=None):
         ex = []
         start_helix = False
         helix = []
+
+        # Probably should make these fx params or hyper-params
         # How many residues of the protein to discard at the beginning and the end since ends can be floppy
         skip_start = 20
         skip_end = 10
         # number of residues Helix/beta sheet has to consist of to be considered stable
         stable_helix = 8
 
-        #Check if more helices, more beta sheets in structure, choose predominant one
+        # Check if more helices, more beta sheets in structure, choose predominant one
         # (if more beta sheets use both helices and sheets)
         res_in_helix = structure.count('H')
         res_in_sheet = structure.count('E')
@@ -288,15 +290,15 @@ def _is_collinear(positions, atoms, threshold=0.9):
     -------
     result : bool
         Returns True if any sequential pair of vectors is collinear; False otherwise.
+
+    Modification proposed by Eric Dybeck
     """
     result = False
     for i in range(len(atoms) - 2):
         v1 = positions[atoms[i + 1], :] - positions[atoms[i], :]
         v2 = positions[atoms[i + 2], :] - positions[atoms[i + 1], :]
         normalized_inner_product = np.dot(v1, v2) / np.sqrt(np.dot(v1, v1) * np.dot(v2, v2))
-
-    result = result or (normalized_inner_product > threshold)
-
+        result = result or (np.abs(normalized_inner_product) > threshold) #INDENT AND ABSOLUTE VALUE ADDED HERE
     return result
 
 def check_angle(angle):
