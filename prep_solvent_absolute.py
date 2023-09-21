@@ -1,5 +1,5 @@
 import parmed as pmd
-from SeparatedTopologies import solvent as so
+import make_absolute_top_solvent as so
 
 #Name of project directory
 dir = ''
