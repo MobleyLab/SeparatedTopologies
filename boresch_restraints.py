@@ -213,6 +213,16 @@ def protein_list(traj, l1, residues2exclude=None):
             sec_struc = ['H', 'E']
         for inx, b in enumerate(structure):
 
+            # We will trim the first and last few residues in a stable element of secondary structure
+            # to avoid getting (potentially) floppy terminal residues in our restraints
+            # Beta sheets may be shorter than alpha helices so prune differently depending on structure type
+            if b == 'H':
+                trim_length = 3
+            else:
+                trim_length = 2
+
+            #TODO: There are code references here to 'helix' that really ought to refer to whichever secondary structure element we're looking at
+
             if b in sec_struc and skip_start-1 < inx < (len(structure) - skip_end):
                 # look for a start of a helix
                 if structure[inx - 1] != b:
@@ -228,14 +238,14 @@ def protein_list(traj, l1, residues2exclude=None):
                 # Find end of helix
                 elif structure[inx - 4:inx + 1].count(b) == 5 and structure[inx + 1] != b and start_helix == True:
                     helix.append('resid ' + str(inx))
-                    # Leave out first 3 and last 3 residues of loop/sheet
-                    ex.append(helix[3:-3])
+                    # Leave out first N residues of loop/sheet
+                    ex.append(helix[trim_length:-trim_length])
 
                 # If structure ends with helix account for that
                 elif structure[inx - 4:inx + 1].count(b) == 5 and inx + 1 == (len(structure) - 6) and start_helix == True:
                     helix.append('resid ' + str(inx))
-                    # Leave out first 3 and last 3 residues of loop/sheet
-                    ex.append(helix[3:-3])
+                    # Leave out first N residues of loop/sheet
+                    ex.append(helix[trim_length:-trim_length])
                 else:
                     if start_helix == True:
                         helix.append('resid ' + str(inx))
@@ -248,10 +258,10 @@ def protein_list(traj, l1, residues2exclude=None):
         # Discard atoms with RMSF > 0.1
         indices = [heavy_protein_full.index(h) for h in heavy_protein]
         heavy_protein = [h for inx, h in enumerate(heavy_protein) if rmsf[indices[inx]] < 0.1]
-        
+
         #If no protein atoms found, raise exception
         if len(heavy_protein) == 0:
-            raise ValueError('No protein atoms found. Check input files, e.g. check if periodic boundary conditions were removed from trajectory')  
+            raise ValueError('No protein atoms found. Check input files, e.g. check if periodic boundary conditions were removed from trajectory')
 
     #if a list of residue indices is provided: exclude those residues
     else:
