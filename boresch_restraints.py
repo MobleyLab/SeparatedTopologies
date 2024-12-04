@@ -2,12 +2,12 @@
 #Ligand atoms: largest ring systems, atoms closest to ligand COM
 #protein atoms: middle of a helix, backbone/C-beta, >1nm away from ligand COM, check angles
 
+from functools import reduce
 import numpy as np
 import mdtraj as md
 import itertools
 from simtk import unit
 from scipy.spatial import distance
-from openeye import oechem
 import math
 from scipy import stats
 #from openforcefield.topology import Molecule
@@ -18,6 +18,75 @@ force_const = 83.68
 R = 8.31445985*0.001  # Gas constant in kJ/mol/K
 T = 298.15
 RT = R*T
+
+
+def determine_rings_oechem(lig: str):
+    from openeye import oechem
+
+    # Load in ligand from mol2 into openeye
+    ifs = oechem.oemolistream(lig)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
+
+    # Find ring systems (here not specifically aromatic, could change that)
+    nr_ring_systems, parts = oechem.OEDetermineRingSystems(mol)
+    atoms = []
+
+    if nr_ring_systems:
+        # Loop through ringsystems, count number of atoms
+        for ringidx in range(1, nr_ring_systems + 1):
+            single_ring = []
+            # store atom indices of ring systems
+            for atom in mol.GetAtoms():
+                if parts[atom.GetIdx()] == ringidx:
+                    single_ring.append(atom.GetIdx())
+            atoms.append(single_ring)
+
+    return atoms
+
+
+def determine_rings_rdkit(lig: str):
+    from rdkit import Chem
+
+    m = Chem.MolFromMol2File(lig, removeHs=False)
+
+    ringinfo = m.GetRingInfo()
+
+    rings = ringinfo.AtomRings()
+    # unlike oechem, this is each ring, rather than ring systems, so let's merge
+    # 1) make a graph of all rings
+    g = nx.Graph()
+    g.add_nodes_from(frozenset(r) for r in rings)
+    for a, b in itertools.combinations(g.nodes, 2):
+        # 2) connect rings that have at least one atom in common
+        if a & b:
+            g.add_edge(a, b)
+    # 3) merge connected components to find fused ring systems
+    ringsystems = [list(reduce(lambda x, y: x | y, n))
+                   for n in nx.connected_components(g)]
+
+    return ringsystems
+
+
+def determine_rings(lig: str, use_oechem=True):
+    """Assign atoms into different ring systems
+
+    Parameters
+    ----------
+    lig : str
+      path to the mol2 file
+
+
+    Returns
+    -------
+    atoms
+       for each ring system system, the indices of atoms within
+    """
+    if use_oechem:
+        return determine_rings_oechem(lig)
+    else:
+        return determine_rings_rdkit(lig)
+
 
 def select_ligand_atoms(lig, traj, ligand='LIG'):
     """Select three ligand atoms for Boresch-style restraints.
@@ -43,10 +112,6 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
     #Store length of the ligand
     lig_length = len(ligand)
     ligand_traj = traj.atom_slice(ligand, inplace=False)
-    #Load in ligand from mol2 into openeye
-    ifs = oechem.oemolistream(lig)
-    mol = oechem.OEGraphMol()
-    oechem.OEReadMolecule(ifs, mol)
 
     #Use openff to make graph from molecule
     molecule = Molecule(lig)
@@ -70,28 +135,12 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
                 longest_paths.append(value)
     #there might be multiple longest path, just choose first one for now
     center = longest_paths[0][int(len(longest_paths[0])/2)]
-    #Load in ligand from mol2 into openeye
-    ifs = oechem.oemolistream(lig)
-    mol = oechem.OEGraphMol()
-    oechem.OEReadMolecule(ifs, mol)
 
-    # Find ring systems (here not specifically aromatic, could change that)
-    nr_ring_systems, parts = oechem.OEDetermineRingSystems(mol)
-    ring_systems = []
-    atoms = []
+    atoms = determine_rings_oechem(lig)
+    nr_ring_systems = len(atoms)
+
     # If we find a ring system in our molecule
     if nr_ring_systems >= 1:
-        #Loop through ringsystems, count number of atoms
-        for ringidx in range(1, nr_ring_systems + 1):
-            single_ring = []
-            nr_atoms = parts.count(ringidx)
-            ring_systems.append(nr_atoms)
-            #store atom indices of ring systems
-            for atom in mol.GetAtoms():
-                if parts[atom.GetIdx()] == ringidx:
-                    single_ring.append(atom.GetIdx())
-            atoms.append(single_ring)
-
         # Compute RMSF ligand atoms
         ligand_traj.superpose(ligand_traj)
         rmsf = list(md.rmsf(ligand_traj, ligand_traj, 0))
@@ -99,8 +148,7 @@ def select_ligand_atoms(lig, traj, ligand='LIG'):
         ring_atoms = []
         # also save ring atoms ring by ring in nested list to be able to select atoms from a single ring later
         ring_atoms_2 = []
-        for inx,r in enumerate(ring_systems):
-            atoms_ring = atoms[inx]
+        for atoms_ring in atoms:
             rmsf_ring = [rmsf[a] for a in atoms_ring]
             #Only choose ring systems that are stable (RMSF<0.1)
             if max(rmsf_ring) < 0.1:
@@ -321,19 +369,9 @@ def check_angle(angle):
         return False
     return True
 
-def substructure_search(mol2_lig, smarts):
-    """Pick ligand atoms for restraints based on substructure search.
-        Parameters
-        ----------
-        mol2_lig : str
-           mol2 file of the ligand.
-        smarts : str
-            Smarts pattern used for substructure search. One atom is flagged and picked for restraints.
-        Returns
-        -------
-        matches: list
-            Indices of ligand atoms that match the picked atom in the substructure.
-        """
+def substructure_search_oechem(mol2_lig, smarts):
+    from openeye import oechem
+
     ifs = oechem.oemolistream(mol2_lig)
 
     mol = oechem.OEGraphMol()
@@ -353,6 +391,39 @@ def substructure_search(mol2_lig, smarts):
                 matches.append(matched_atom.target.GetIdx())
 
     return matches
+
+
+def substructure_search_rdkit(mol2_lig, smarts):
+    from rdkit import Chem
+
+    m = Chem.MolFromMol2File(mol2_lig, removeHs=False)
+
+    query = Chem.MolFromSmarts(smarts)
+
+    matches = m.GetSubstructMatches(query, uniquify=True)
+
+    raise matches
+
+
+def substructure_search(mol2_lig, smarts, use_oechem=True):
+    """Pick ligand atoms for restraints based on substructure search.
+
+    Parameters
+    ----------
+    mol2_lig : str
+       mol2 file of the ligand.
+    smarts : str
+        Smarts pattern used for substructure search. One atom is flagged and picked for restraints.
+
+    Returns
+    -------
+    matches: list
+        Indices of ligand atoms that match the picked atom in the substructure.
+    """
+    if use_oechem:
+        return substructure_search_oechem(mol2_lig, smarts)
+    else:
+        return substructure_search_rdkit(mol2_lig, smarts)
 
 
 def select_Boresch_atoms(traj, mol2_lig, ligand_atoms = None, protein_atoms = None, substructure = None, ligand='LIG'):
@@ -833,8 +904,9 @@ def analytical_Boresch_correction(r0, thA, thB, fc_r, fc_thA, fc_thB, fc_phiA, f
     dG = dG / 4.184
     return dG
 
-def ligand_sdf(pdb, outfile):
-    ''' Function to get ligand sdf from complex pdb. Only use if no sdf of ligands available. '''
+
+def ligand_sdf_oechem(pdb, outfile):
+    from openeye import oechem
 
     complex_A = oechem.OEGraphMol()
     ifs = oechem.oemolistream()
@@ -856,3 +928,44 @@ def ligand_sdf(pdb, outfile):
     oechem.OEWriteMolecule(ofs, lig)
 
     return
+
+
+def ligand_sdf_rdkit(pdb, outfile):
+    from rdkit import Chem
+
+    # these resnames get skipped, i.e. aren't considered the ligand
+    water = {'SOL', 'HOH', 'WAT'}
+    AAs = {'GLY', 'ALA', 'VAL', 'LEU', 'ILE',
+           'MET', 'PHE', 'TYR', 'TRP', 'ARG',
+           'CYS', 'ASN', 'GLN', 'THR', 'SER',
+           'PRO', 'HIS', 'LYS', 'ASP', 'GLU',
+           'CYX', 'HID', 'HIP', 'HIE'}
+
+    m = Chem.MolFromPDBFile(pdb, removeHs=False)
+
+    lig = None
+    mols = Chem.GetMolFrags(m, asMols=True, sanitizeFrags=False)
+
+    for mol in mols:
+        resname = mol.GetAtomWithIdx(0).GetMonomerInfo().GetResidueName().upper()
+        if resname in water:
+            continue
+        if resname in AAs:
+            continue
+
+        if lig is None:
+            lig = mol
+        else:
+            lig = Chem.CombineMols(lig, mol)
+
+    Chem.MolToMolFile(lig, outfile)
+
+
+def ligand_sdf(pdb, outfile, use_oechem=True):
+    """Get ligand sdf from complex pdb.
+
+     Only use if no sdf of ligands available."""
+    if use_oechem:
+        return ligand_sdf_oechem(pdb, outfile)
+    else:
+        return ligand_sdf_rdkit(pdb, outfile)
